@@ -1,0 +1,27 @@
+const express = require("express");
+const router = express.Router();
+
+const authenticate = require("../middleware/auth");
+const botController = require("../controllers/bot.controller");
+const processController = require("../controllers/process.controller");
+const uploadBotFile = require("../middleware/bot-upload");
+
+router.use(authenticate);
+
+router.post("/", botController.createBot);
+router.post("/:id/upload", uploadBotFile, botController.uploadBotFiles);
+
+router.post("/:id/start", processController.start);
+router.post("/:id/stop", processController.stop);
+router.post("/:id/restart", processController.restart);
+
+router.get("/", botController.listBots);
+router.get("/:id", botController.getBot);
+router.get("/:id/status", processController.status);
+router.get("/:id/deployments", botController.listDeployments);
+router.get("/:id/logs", processController.logs);
+
+router.patch("/:id", botController.updateBot);
+router.delete("/:id", botController.deleteBot);
+
+module.exports = router;
