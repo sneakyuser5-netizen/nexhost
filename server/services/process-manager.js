@@ -5,6 +5,19 @@ const { db } = require("../../database/db");
 
 const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
 const LOGS_DIR = path.resolve(__dirname, "../../storage/logs");
+
+const BOT_MAX_OLD_SPACE_MB = Number(
+    process.env.BOT_MAX_OLD_SPACE_MB || 256
+);
+
+if (
+    !Number.isSafeInteger(BOT_MAX_OLD_SPACE_MB) ||
+    BOT_MAX_OLD_SPACE_MB < 64 ||
+    BOT_MAX_OLD_SPACE_MB > 2048
+) {
+    throw new Error("BOT_MAX_OLD_SPACE_MB must be between 64 and 2048.");
+}
+
 const MAX_LOG_BYTES = 1024 * 1024;
 
 const processes = new Map();
@@ -151,7 +164,10 @@ async function startBot(botId, ownerId) {
     try {
         child = spawn(
             process.execPath,
-            [entryFile],
+            [
+                `--max-old-space-size=${BOT_MAX_OLD_SPACE_MB}`,
+                entryFile
+            ],
             {
                 cwd: botDir,
                 shell: false,
@@ -187,6 +203,7 @@ async function startBot(botId, ownerId) {
 
         if (processes.get(botId) === record) {
             processes.delete(botId);
+            cpuSamples.delete(botId);
         }
 
         updateStatus(botId, status);
@@ -304,6 +321,116 @@ function getBotLogs(botId, ownerId, lines = 50) {
         .join("\n");
 }
 
+
+const CPU_CLOCK_TICKS = 100;
+const cpuSamples = new Map();
+
+function getBotResourceUsage(botId, ownerId) {
+    const bot = getOwnedBot(botId, ownerId);
+
+    if (!bot) throw new Error("Bot not found.");
+
+    const record = processes.get(botId);
+
+    if (!record) {
+        return {
+            botId,
+            status: bot.status,
+            running: false,
+            pid: null,
+            cpuPercent: null,
+            memoryMB: null,
+            uptimeSeconds: null
+        };
+    }
+
+    const pid = record.child.pid;
+
+    try {
+        const stat = fs.readFileSync(
+            `/proc/${pid}/stat`,
+            "utf8"
+        );
+
+        const end = stat.lastIndexOf(")");
+        const fields = stat.slice(end + 2).trim().split(/\s+/);
+
+        const userTicks = Number(fields[11]);
+        const systemTicks = Number(fields[12]);
+
+        const totalTicks = userTicks + systemTicks;
+
+        const now = process.hrtime.bigint();
+        const previous = cpuSamples.get(botId);
+
+        let cpuPercent = null;
+
+        if (previous) {
+            const elapsedSeconds =
+                Number(now - previous.time) / 1e9;
+
+            const tickDifference =
+                totalTicks - previous.ticks;
+
+            if (elapsedSeconds > 0 && tickDifference >= 0) {
+                cpuPercent =
+                    (tickDifference / CPU_CLOCK_TICKS) /
+                    elapsedSeconds * 100;
+            }
+        }
+
+        cpuSamples.set(botId, {
+            ticks: totalTicks,
+            time: now
+        });
+
+        const status = fs.readFileSync(
+            `/proc/${pid}/status`,
+            "utf8"
+        );
+
+        const rssMatch = status.match(/^VmRSS:\s+(\d+)\s+kB/m);
+
+        if (!rssMatch) {
+            throw new Error("Unable to read process memory.");
+        }
+
+        const memoryMB = Number(rssMatch[1]) / 1024;
+
+        const uptimeSeconds = Math.floor(
+            (Date.now() - Date.parse(record.startedAt)) / 1000
+        );
+
+        return {
+            botId,
+            name: bot.name,
+            status: "running",
+            running: true,
+            pid,
+            cpuPercent: cpuPercent === null
+                ? null
+                : Number(cpuPercent.toFixed(2)),
+            memoryMB: Number(memoryMB.toFixed(2)),
+            uptimeSeconds
+        };
+
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return {
+                botId,
+                status: "unavailable",
+                running: false,
+                pid,
+                cpuPercent: null,
+                memoryMB: null,
+                uptimeSeconds: null
+            };
+        }
+
+        throw error;
+    }
+}
+
 function recoverStaleBots() {
     db.prepare(`
         UPDATE bots
@@ -357,6 +484,7 @@ module.exports = {
     stopBot,
     getBotStatus,
     getBotLogs,
+    getBotResourceUsage,
     recoverStaleBots,
     stopAll
 };

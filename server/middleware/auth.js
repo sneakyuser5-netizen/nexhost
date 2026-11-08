@@ -3,14 +3,17 @@ const { findSession } = require("../services/auth.service");
 function authenticate(req, res, next) {
     const authorization = req.headers.authorization;
 
-    if (!authorization || !authorization.startsWith("Bearer ")) {
+    if (
+        typeof authorization !== "string" ||
+        !/^Bearer\s+/i.test(authorization)
+    ) {
         return res.status(401).json({
             success: false,
             message: "Authentication required."
         });
     }
 
-    const token = authorization.slice(7).trim();
+    const token = authorization.replace(/^Bearer\s+/i, "").trim();
 
     if (!/^[a-f0-9]{64}$/i.test(token)) {
         return res.status(401).json({

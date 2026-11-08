@@ -1,8 +1,12 @@
 require("dotenv").config();
 
+const { cleanupExpiredSessions } = require("./services/auth.service");
+
 const { closeDatabase } = require("../database/db");
 const app = require("./app");
 const manager = require("./services/process-manager");
+
+cleanupExpiredSessions();
 
 manager.recoverStaleBots();
 

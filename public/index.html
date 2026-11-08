@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#090d18">
+    <title>NEXHOST — Bot Hosting</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/app.js" defer></script>
+</head>
+<body>
+    <div id="toast" class="toast"></div>
+
+    <section id="auth-screen" class="auth-screen">
+        <div class="auth-card">
+            <div class="brand brand-large">
+                <span class="brand-icon">N</span>
+                <span>NEXHOST</span>
+            </div>
+
+            <p class="muted">Your bots. Your control.</p>
+
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-auth="login">Login</button>
+                <button class="auth-tab" data-auth="register">Register</button>
+            </div>
+
+            <form id="auth-form">
+                <label>Email</label>
+                <input id="auth-email" type="email" placeholder="you@example.com" required>
+
+                <label>Password</label>
+                <input id="auth-password" type="password"
+                    placeholder="At least 10 characters" required minlength="10">
+
+                <button id="auth-submit" class="primary-btn full-btn" type="submit">
+                    Login
+                </button>
+            </form>
+
+            <p id="auth-error" class="error-text"></p>
+        </div>
+    </section>
+
+    <div id="dashboard" class="dashboard hidden">
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-icon">N</span>
+                <span>NEXHOST</span>
+            </div>
+
+            <div class="side-label">WORKSPACE</div>
+
+            <button class="nav-item active" data-view="overview">
+                <span>◫</span> Overview
+            </button>
+
+            <button class="nav-item" data-view="bots">
+                <span>▣</span> My Bots
+            </button>
+
+            <button class="nav-item" data-view="deployments">
+                <span>⇧</span> Deployments
+            </button>
+
+            <div class="sidebar-bottom">
+                <div class="user-box">
+                    <div class="avatar">U</div>
+                    <div class="user-info">
+                        <strong id="user-email">User</strong>
+                        <small>Account</small>
+                    </div>
+                </div>
+                <button id="logout-btn" class="logout-btn">↪ Logout</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h1 id="page-title">Overview</h1>
+                    <p class="muted">Manage your Node.js bots.</p>
+                </div>
+                <button id="new-bot-btn" class="primary-btn">+ Create Bot</button>
+            </header>
+
+            <section id="view-overview" class="view">
+                <div class="welcome-panel">
+                    <div>
+                        <span class="eyebrow">NEXHOST CONTROL PANEL</span>
+                        <h2>Your bots, running your way.</h2>
+                        <p>Deploy, manage and monitor your Node.js applications.</p>
+                    </div>
+                    <div class="welcome-symbol">⌘</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span>Total Bots</span>
+                        <strong id="total-bots">0</strong>
+                        <small>All your applications</small>
+                    </div>
+                    <div class="stat-card">
+                        <span>Running</span>
+                        <strong id="running-bots">0</strong>
+                        <small>Active processes</small>
+                    </div>
+                    <div class="stat-card">
+                        <span>Stopped</span>
+                        <strong id="stopped-bots">0</strong>
+                        <small>Inactive applications</small>
+                    </div>
+                </div>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Live Resource Monitoring</h2>
+                        <p class="muted">Real-time CPU and memory usage.</p>
+                    </div>
+                    <span class="status running">LIVE</span>
+                </div>
+                <div id="resource-grid" class="bot-grid">
+                    <div class="empty-state">Waiting for resource data...</div>
+                </div>
+
+                <div class="section-heading">
+                    <h2>Recent Bots</h2>
+                    <button class="text-btn" data-view="bots">View all →</button>
+                </div>
+                <div id="recent-bots" class="bot-grid"></div>
+            </section>
+
+            <section id="view-bots" class="view hidden">
+                <div class="section-heading">
+                    <div>
+                        <h2>My Applications</h2>
+                        <p class="muted">Create and manage your bots.</p>
+                    </div>
+                </div>
+                <div id="bot-list" class="bot-grid"></div>
+            </section>
+
+            <section id="view-deployments" class="view hidden">
+                <div class="section-heading">
+                    <div>
+                        <h2>Deployment History</h2>
+                        <p class="muted">Recent deployments across your bots.</p>
+                    </div>
+                </div>
+                <div id="deployment-list" class="panel">
+                    <p class="muted">Loading deployments...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="bot-modal" class="modal hidden">
+        <div class="modal-card">
+            <div class="modal-heading">
+                <h2>Create a bot</h2>
+                <button class="close-btn" data-close="bot-modal">×</button>
+            </div>
+            <form id="create-bot-form">
+                <label>Bot name</label>
+                <input id="bot-name" required minlength="3" maxlength="32"
+                    pattern="[a-zA-Z0-9_-]+" placeholder="my-first-bot">
+
+                <label>Entry file</label>
+                <input id="bot-entry" value="index.js" required>
+
+                <label>Runtime</label>
+                <input value="Node.js" disabled>
+
+                <button class="primary-btn full-btn" type="submit">Create Bot</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="details-modal" class="modal hidden">
+        <div class="modal-card details-card">
+            <div class="modal-heading">
+                <h2 id="details-title">Bot details</h2>
+                <button class="close-btn" data-close="details-modal">×</button>
+            </div>
+            <div class="details-tabs">
+                <button class="detail-tab active" data-detail="logs">Console</button>
+                <button class="detail-tab" data-detail="deployments">Deployments</button>
+            </div>
+            <div id="details-content" class="details-content"></div>
+        </div>
+    </div>
+</body>
+</html>

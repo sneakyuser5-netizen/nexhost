@@ -8,9 +8,18 @@ const {
     revokeSession
 } = require("../services/auth.service");
 
+function validEmail(email) {
+    return (
+        typeof email === "string" &&
+        email.length <= 254 &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    );
+}
+
 async function register(req, res) {
     try {
-        const { email, password } = req.body;
+        const body = req.body || {};
+        const { email, password } = body;
 
         if (!email || !password) {
             return res.status(400).json({
@@ -21,10 +30,7 @@ async function register(req, res) {
 
         const normalizedEmail = String(email).trim().toLowerCase();
 
-        if (
-            normalizedEmail.length > 254 ||
-            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
-        ) {
+        if (!validEmail(normalizedEmail)) {
             return res.status(400).json({
                 success: false,
                 message: "Please provide a valid email address."
@@ -87,16 +93,29 @@ async function register(req, res) {
 
 async function login(req, res) {
     try {
-        const { email, password } = req.body;
+        const body = req.body || {};
+        const { email, password } = body;
 
-        if (!email || !password) {
+        if (
+            typeof email !== "string" ||
+            typeof password !== "string" ||
+            !email.trim() ||
+            !password
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Email and password are required."
             });
         }
 
-        const normalizedEmail = String(email).trim().toLowerCase();
+        const normalizedEmail = email.trim().toLowerCase();
+
+        if (!validEmail(normalizedEmail) || password.length > 128) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password."
+            });
+        }
 
         const user = db.prepare(`
             SELECT id, email, password_hash, role

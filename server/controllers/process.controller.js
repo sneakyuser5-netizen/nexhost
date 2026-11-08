@@ -81,3 +81,20 @@ module.exports.restart = async function(req, res) {
         return handleError(res, error);
     }
 };
+
+
+module.exports.resources = function(req, res) {
+    try {
+        const result = manager.getBotResourceUsage(
+            req.params.id,
+            req.user.id
+        );
+
+        return res.json({
+            success: true,
+            resources: result
+        });
+    } catch (error) {
+        return handleError(res, error);
+    }
+};

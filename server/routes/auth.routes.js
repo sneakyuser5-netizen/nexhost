@@ -4,10 +4,11 @@ const router = express.Router();
 
 const authController = require("../controllers/auth.controller");
 const authenticate = require("../middleware/auth");
+const { authLimiter } = require("../middleware/rate-limit");
 
-router.post("/register", authController.register);
+router.post("/register", authLimiter, authController.register);
 
-router.post("/login", authController.login);
+router.post("/login", authLimiter, authController.login);
 
 router.get("/me", authenticate, authController.me);
 

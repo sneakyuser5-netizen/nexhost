@@ -9,6 +9,8 @@ const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
+const MAX_PATH_DEPTH = 15;
+const MAX_COMPRESSION_RATIO = 100;
 
 function extractZip(buffer, destination) {
     return new Promise((resolve, reject) => {
@@ -22,6 +24,8 @@ function extractZip(buffer, destination) {
             let totalSize = 0;
             let settled = false;
 
+            const entries = new Map();
+
             function fail(err) {
                 if (settled) return;
                 settled = true;
@@ -33,12 +37,52 @@ function extractZip(buffer, destination) {
                 reject(err);
             }
 
+            function registerEntry(relativePath, isDirectory) {
+                const key = relativePath.toLowerCase();
+
+                if (entries.has(key)) {
+                    throw new Error("Archive contains duplicate or conflicting paths.");
+                }
+
+                const segments = relativePath.split("/");
+
+                if (segments.length > MAX_PATH_DEPTH) {
+                    throw new Error("Archive directory depth exceeds the limit.");
+                }
+
+                for (let i = 1; i < segments.length; i++) {
+                    const parent = segments.slice(0, i).join("/").toLowerCase();
+                    const parentType = entries.get(parent);
+
+                    if (parentType === "file") {
+                        throw new Error("Archive contains a file/directory conflict.");
+                    }
+                }
+
+                if (!isDirectory) {
+                    const prefix = key + "/";
+
+                    for (const existing of entries.keys()) {
+                        if (existing.startsWith(prefix)) {
+                            throw new Error("Archive contains a file/directory conflict.");
+                        }
+                    }
+                }
+
+                entries.set(key, isDirectory ? "directory" : "file");
+            }
+
             zipfile.on("error", fail);
 
             zipfile.on("end", () => {
                 if (settled) return;
+
                 settled = true;
-                resolve({ fileCount, totalSize });
+
+                resolve({
+                    fileCount,
+                    totalSize
+                });
             });
 
             zipfile.on("entry", async (entry) => {
@@ -57,7 +101,7 @@ function extractZip(buffer, destination) {
                         !name ||
                         name.includes("\\") ||
                         name.includes("\0") ||
-                        path.posix.isAbsolute(name) ||
+                        name.startsWith("/") ||
                         /^[a-zA-Z]:/.test(name)
                     ) {
                         throw new Error("Unsafe archive path detected.");
@@ -68,12 +112,16 @@ function extractZip(buffer, destination) {
 
                     if (
                         segments.length === 0 ||
-                        segments.some(part => part === "." || part === "..")
+                        segments.some(part =>
+                            part === "." ||
+                            part === ".."
+                        )
                     ) {
                         throw new Error("Unsafe archive path detected.");
                     }
 
                     const relativePath = segments.join("/");
+
                     const target = path.resolve(destination, relativePath);
                     const relative = path.relative(destination, target);
 
@@ -84,12 +132,10 @@ function extractZip(buffer, destination) {
                         throw new Error("Archive path escapes bot directory.");
                     }
 
-                    const unixMode = (entry.externalFileAttributes >>> 16) & 0xFFFF;
-                    const fileType = unixMode & 0o170000;
+                    const unixMode =
+                        (entry.externalFileAttributes >>> 16) & 0xFFFF;
 
-                    if (fileType === 0o120000) {
-                        throw new Error("Symbolic links are not allowed.");
-                    }
+                    const fileType = unixMode & 0o170000;
 
                     if (
                         fileType !== 0 &&
@@ -99,14 +145,33 @@ function extractZip(buffer, destination) {
                         throw new Error("Special files are not allowed.");
                     }
 
-                    if (isDirectory || fileType === 0o040000) {
-                        await fs.promises.mkdir(target, { recursive: true });
+                    if (
+                        fileType === 0o040000 &&
+                        !isDirectory
+                    ) {
+                        throw new Error("Invalid directory entry.");
+                    }
+
+                    if (
+                        isDirectory &&
+                        entry.uncompressedSize !== 0
+                    ) {
+                        throw new Error("Invalid directory size.");
+                    }
+
+                    registerEntry(relativePath, isDirectory);
+
+                    if (isDirectory) {
+                        await fs.promises.mkdir(target, {
+                            recursive: true
+                        });
+
                         zipfile.readEntry();
                         return;
                     }
 
-                    if (fileType === 0o120000) {
-                        throw new Error("Symbolic links are not allowed.");
+                    if (entry.isEncrypted()) {
+                        throw new Error("Encrypted ZIP entries are not allowed.");
                     }
 
                     if (entry.uncompressedSize > MAX_FILE_SIZE) {
@@ -119,13 +184,30 @@ function extractZip(buffer, destination) {
                         throw new Error("Extracted archive exceeds 100 MB.");
                     }
 
+                    if (
+                        entry.uncompressedSize > 0 &&
+                        entry.compressedSize === 0
+                    ) {
+                        throw new Error("Invalid ZIP compression data.");
+                    }
+
+                    if (
+                        entry.compressedSize > 0 &&
+                        entry.uncompressedSize / entry.compressedSize >
+                            MAX_COMPRESSION_RATIO
+                    ) {
+                        throw new Error("Archive compression ratio exceeds the limit.");
+                    }
+
                     await fs.promises.mkdir(path.dirname(target), {
                         recursive: true
                     });
 
                     await new Promise((resolveStream, rejectStream) => {
                         zipfile.openReadStream(entry, async (streamError, stream) => {
-                            if (streamError) return rejectStream(streamError);
+                            if (streamError) {
+                                return rejectStream(streamError);
+                            }
 
                             try {
                                 await pipeline(
@@ -137,16 +219,16 @@ function extractZip(buffer, destination) {
                                 );
 
                                 resolveStream();
-                            } catch (err) {
-                                rejectStream(err);
+                            } catch (streamError) {
+                                rejectStream(streamError);
                             }
                         });
                     });
 
                     zipfile.readEntry();
 
-                } catch (err) {
-                    fail(err);
+                } catch (error) {
+                    fail(error);
                 }
             });
 
@@ -167,11 +249,21 @@ async function uploadBotArchive(bot, buffer) {
         throw new Error("Uploaded file is not a valid ZIP archive.");
     }
 
-    await fs.promises.mkdir(BOTS_DIR, { recursive: true });
+    await fs.promises.mkdir(BOTS_DIR, {
+        recursive: true
+    });
 
-    const staging = path.join(BOTS_DIR, `.staging-${crypto.randomUUID()}`);
+    const staging = path.join(
+        BOTS_DIR,
+        `.staging-${crypto.randomUUID()}`
+    );
+
     const target = path.join(BOTS_DIR, bot.id);
-    const backup = path.join(BOTS_DIR, `.backup-${crypto.randomUUID()}`);
+
+    const backup = path.join(
+        BOTS_DIR,
+        `.backup-${crypto.randomUUID()}`
+    );
 
     await fs.promises.mkdir(staging);
 
@@ -180,9 +272,19 @@ async function uploadBotArchive(bot, buffer) {
     try {
         const result = await extractZip(buffer, staging);
 
-        const entryPath = path.join(staging, bot.entry_file);
+        const entryPath = path.resolve(staging, bot.entry_file);
+        const entryRelative = path.relative(staging, entryPath);
 
-        if (!fs.existsSync(entryPath) || !fs.statSync(entryPath).isFile()) {
+        if (
+            entryRelative.startsWith("..") ||
+            path.isAbsolute(entryRelative)
+        ) {
+            throw new Error("Invalid bot entry file path.");
+        }
+
+        const entryStat = await fs.promises.stat(entryPath).catch(() => null);
+
+        if (!entryStat || !entryStat.isFile()) {
             throw new Error(
                 `Entry file "${bot.entry_file}" was not found in the ZIP archive.`
             );
@@ -200,6 +302,7 @@ async function uploadBotArchive(bot, buffer) {
                 await fs.promises.rename(backup, target);
                 backupCreated = false;
             }
+
             throw error;
         }
 
@@ -230,4 +333,6 @@ async function uploadBotArchive(bot, buffer) {
     }
 }
 
-module.exports = { uploadBotArchive };
+module.exports = {
+    uploadBotArchive
+};

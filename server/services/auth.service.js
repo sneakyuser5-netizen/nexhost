@@ -4,26 +4,69 @@ const { db } = require("../../database/db");
 
 const scrypt = promisify(crypto.scrypt);
 
+const SCRYPT_OPTIONS = {
+    N: 16384,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024
+};
+
 async function hashPassword(password) {
+    if (typeof password !== "string" || password.length < 10 || password.length > 128) {
+        throw new Error("Invalid password length.");
+    }
+
     const salt = crypto.randomBytes(16).toString("hex");
 
-    const hash = await scrypt(password, salt, 64);
+    const hash = await scrypt(
+        password,
+        salt,
+        64,
+        SCRYPT_OPTIONS
+    );
 
     return `${salt}:${hash.toString("hex")}`;
 }
 
 async function verifyPassword(password, storedHash) {
-    const [salt, originalHash] = storedHash.split(":");
+    try {
+        if (
+            typeof password !== "string" ||
+            password.length === 0 ||
+            password.length > 128 ||
+            typeof storedHash !== "string"
+        ) {
+            return false;
+        }
 
-    if (!salt || !originalHash) return false;
+        const parts = storedHash.split(":");
 
-    const hash = await scrypt(password, salt, 64);
+        if (parts.length !== 2) return false;
 
-    const originalBuffer = Buffer.from(originalHash, "hex");
+        const [salt, originalHash] = parts;
 
-    if (hash.length !== originalBuffer.length) return false;
+        if (
+            !/^[a-f0-9]{32}$/i.test(salt) ||
+            !/^[a-f0-9]{128}$/i.test(originalHash)
+        ) {
+            return false;
+        }
 
-    return crypto.timingSafeEqual(hash, originalBuffer);
+        const hash = await scrypt(
+            password,
+            salt,
+            64,
+            SCRYPT_OPTIONS
+        );
+
+        const originalBuffer = Buffer.from(originalHash, "hex");
+
+        return crypto.timingSafeEqual(hash, originalBuffer);
+
+    } catch (error) {
+        console.error("[PASSWORD VERIFY]", error.message);
+        return false;
+    }
 }
 
 function hashToken(token) {
@@ -87,10 +130,19 @@ function revokeSession(token) {
     `).run(tokenHash);
 }
 
+function cleanupExpiredSessions() {
+    return db.prepare(`
+        DELETE FROM sessions
+        WHERE revoked_at IS NOT NULL
+        OR datetime(expires_at) <= datetime('now')
+    `).run();
+}
+
 module.exports = {
     hashPassword,
     verifyPassword,
     createSession,
     findSession,
-    revokeSession
+    revokeSession,
+    cleanupExpiredSessions
 };
