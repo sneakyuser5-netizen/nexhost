@@ -556,7 +556,8 @@ async function loadAllDeployments() {
                 const result = await api(`/bots/${encodeURIComponent(bot.id)}/deployments`);
                 return result.deployments.map(deployment => ({
                     ...deployment,
-                    botName: bot.name,\n                    botId: bot.id
+                    botName: bot.name,
+                    botId: bot.id
                 }));
             })
         );

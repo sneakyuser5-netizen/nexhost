@@ -755,3 +755,27 @@ input:focus {
 .resource-detail strong {
     font-size: 13px;
 }
+
+/* Mobile account access */
+@media (max-width: 800px) {
+    .sidebar-bottom {
+        display: block;
+        position: fixed;
+        top: 68px;
+        right: 12px;
+        z-index: 20;
+        background: var(--panel);
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
+
+    .sidebar-bottom .user-box {
+        display: none;
+    }
+
+    .logout-btn {
+        width: auto;
+        padding: 9px 14px;
+    }
+}
