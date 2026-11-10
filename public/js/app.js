@@ -7,6 +7,8 @@ let bots = [];
 let authMode = "login";
 let activeBotId = null;
 let detailMode = "logs";
+let logAutoRefresh = true;
+let logRequestRunning = false;
 let toastTimer;
 
 const $ = selector => document.querySelector(selector);
@@ -399,6 +401,24 @@ async function uploadBot(id, file) {
     }
 }
 
+async function rollbackBot(botId, deploymentId) {
+    if (!confirm("Restore this deployment? The current bot files will be replaced.")) return;
+
+    try {
+        const result = await api(
+            `/bots/${encodeURIComponent(botId)}/rollback/${encodeURIComponent(deploymentId)}`,
+            { method: "POST" }
+        );
+
+        notify(result.message || "Deployment restored successfully.");
+        await loadBots();
+        await loadDetails();
+        await loadAllDeployments();
+    } catch (error) {
+        notify(error.message);
+    }
+}
+
 async function openDetails(id, mode = "logs") {
     activeBotId = id;
     detailMode = mode;
@@ -414,16 +434,96 @@ async function openDetails(id, mode = "logs") {
     await loadDetails();
 }
 
+function renderLogLines(logText) {
+    return String(logText || "")
+        .split(/\r?\n/)
+        .map(line => {
+            const safeLine = escapeHTML(line);
+            let className = "";
+
+            if (/\b(error|fatal|exception|uncaught)\b/i.test(line)) {
+                className = "log-error";
+            } else if (/\b(warn|warning)\b/i.test(line)) {
+                className = "log-warning";
+            }
+
+            return `<span class="${className}">${safeLine}</span>`;
+        })
+        .join("\n");
+}
+
+async function loadBotLogs() {
+    if (logRequestRunning || !activeBotId) return;
+
+    const target = $("#details-content");
+    const output = target.querySelector(".log-output");
+    const botId = activeBotId;
+
+    if (!output) return;
+
+    logRequestRunning = true;
+
+    try {
+        const result = await api(
+            `/bots/${encodeURIComponent(botId)}/logs`
+        );
+
+        if (activeBotId !== botId || detailMode !== "logs") return;
+
+        const currentOutput = $("#details-content").querySelector(".log-output");
+        if (!currentOutput) return;
+
+        currentOutput.innerHTML = renderLogLines(
+            result.logs || "No logs available."
+        );
+        currentOutput.scrollTop = currentOutput.scrollHeight;
+
+        const status = $("#log-refresh-status");
+        if (status) {
+            status.textContent = logAutoRefresh
+                ? "Auto-refresh: ON"
+                : "Auto-refresh: PAUSED";
+        }
+    } catch (error) {
+        if (activeBotId === botId) {
+            const status = $("#log-refresh-status");
+            if (status) status.textContent = error.message;
+        }
+    } finally {
+        logRequestRunning = false;
+    }
+}
+
 async function loadDetails() {
     const target = $("#details-content");
     target.innerHTML = `<p class="muted">Loading...</p>`;
 
     try {
         if (detailMode === "logs") {
-            const result = await api(`/bots/${encodeURIComponent(activeBotId)}/logs`);
-            target.innerHTML = `<pre class="log-output">${escapeHTML(result.logs || "No logs available.")}</pre>`;
+            target.innerHTML = `
+                <div class="log-toolbar">
+                    <div class="log-controls">
+                        <button class="small-btn" data-log-action="pause">
+                            Pause
+                        </button>
+                        <button class="small-btn" data-log-action="refresh">
+                            Refresh
+                        </button>
+                        <button class="small-btn" data-log-action="clear">
+                            Clear view
+                        </button>
+                    </div>
+                    <span id="log-refresh-status">Auto-refresh: ON</span>
+                </div>
+                <pre class="log-output" aria-live="polite"></pre>
+            `;
+
+            await loadBotLogs();
         } else {
-            const result = await api(`/bots/${encodeURIComponent(activeBotId)}/deployments`);
+            const result = await api(
+                `/bots/${encodeURIComponent(activeBotId)}/deployments`
+            );
+
             target.innerHTML = result.deployments.length
                 ? result.deployments.map(deployment => `
                     <div class="deployment-row">
@@ -432,6 +532,11 @@ async function loadDetails() {
                             <div class="bot-meta">${escapeHTML(deployment.created_at)}</div>
                         </div>
                         ${statusBadge(deployment.status)}
+                        <button class="small-btn" data-action="rollback"
+                            data-id="${escapeHTML(activeBotId)}"
+                            data-deployment-id="${escapeHTML(deployment.id)}">
+                            Rollback
+                        </button>
                     </div>
                 `).join("")
                 : `<p class="muted">No deployments found.</p>`;
@@ -451,7 +556,7 @@ async function loadAllDeployments() {
                 const result = await api(`/bots/${encodeURIComponent(bot.id)}/deployments`);
                 return result.deployments.map(deployment => ({
                     ...deployment,
-                    botName: bot.name
+                    botName: bot.name,\n                    botId: bot.id
                 }));
             })
         );
@@ -468,6 +573,11 @@ async function loadAllDeployments() {
                         <div class="bot-meta">${escapeHTML(item.created_at)}</div>
                     </div>
                     ${statusBadge(item.status)}
+                    <button class="small-btn" data-action="rollback"
+                        data-id="${escapeHTML(item.botId)}"
+                        data-deployment-id="${escapeHTML(item.id)}">
+                        Rollback
+                    </button>
                 </div>
             `).join("")
             : `<p class="muted">No deployments yet.</p>`;
@@ -510,12 +620,41 @@ document.addEventListener("click", event => {
         loadDetails();
     }
 
+    const logAction = event.target.closest("[data-log-action]");
+    if (logAction) {
+        const action = logAction.dataset.logAction;
+
+        if (action === "pause") {
+            logAutoRefresh = !logAutoRefresh;
+            logAction.textContent = logAutoRefresh ? "Pause" : "Resume";
+
+            const status = $("#log-refresh-status");
+            if (status) {
+                status.textContent = logAutoRefresh
+                    ? "Auto-refresh: ON"
+                    : "Auto-refresh: PAUSED";
+            }
+
+            if (logAutoRefresh) loadBotLogs();
+        } else if (action === "refresh") {
+            loadBotLogs();
+        } else if (action === "clear") {
+            const output = $("#details-content").querySelector(".log-output");
+            if (output) output.textContent = "";
+
+            const status = $("#log-refresh-status");
+            if (status) status.textContent = "Display cleared; server logs unchanged.";
+        }
+    }
+
     const action = event.target.closest("[data-action]");
     if (action) {
         const { id } = action.dataset;
 
         if (["start", "stop", "restart"].includes(action.dataset.action)) {
             processAction(id, action.dataset.action);
+        } else if (action.dataset.action === "rollback") {
+            rollbackBot(id, action.dataset.deploymentId);
         } else if (action.dataset.action === "delete") {
             deleteBot(id);
         } else if (action.dataset.action === "details") {
@@ -548,9 +687,6 @@ setInterval(() => {
     if (token && !$("#dashboard").classList.contains("hidden")) {
         loadBots();
 
-        if (!$("#details-modal").classList.contains("hidden") && detailMode === "logs") {
-            loadDetails();
-        }
     }
 }, 10000);
 
@@ -558,5 +694,13 @@ setInterval(() => {
 setInterval(() => {
     if (token && !$("#dashboard").classList.contains("hidden")) {
         loadResources();
+
+        if (
+            logAutoRefresh &&
+            !$("#details-modal").classList.contains("hidden") &&
+            detailMode === "logs"
+        ) {
+            loadBotLogs();
+        }
     }
 }, 3000);

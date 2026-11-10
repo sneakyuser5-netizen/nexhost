@@ -5,6 +5,7 @@ const yauzl = require("yauzl");
 const { pipeline } = require("node:stream/promises");
 
 const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
+const SNAPSHOTS_DIR = path.resolve(__dirname, "../../storage/snapshots");
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -237,7 +238,7 @@ function extractZip(buffer, destination) {
     });
 }
 
-async function uploadBotArchive(bot, buffer) {
+async function uploadBotArchive(bot, buffer, deployment) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 4) {
         throw new Error("Invalid ZIP archive.");
     }
@@ -290,6 +291,44 @@ async function uploadBotArchive(bot, buffer) {
             );
         }
 
+        if (
+            !deployment ||
+            !/^[0-9a-f-]{36}$/i.test(deployment.id || "") ||
+            !/^[0-9a-f]{64}$/.test(deployment.archiveHash || "")
+        ) {
+            throw new Error("Invalid deployment snapshot metadata.");
+        }
+
+        const archiveHash = crypto
+            .createHash("sha256")
+            .update(buffer)
+            .digest("hex");
+
+        if (archiveHash !== deployment.archiveHash) {
+            throw new Error("Archive hash does not match deployment record.");
+        }
+
+        if (!/^[0-9a-f-]{36}$/i.test(bot.id || "")) {
+            throw new Error("Invalid bot ID for snapshot storage.");
+        }
+
+        const snapshotDirectory = path.join(SNAPSHOTS_DIR, bot.id);
+
+        await fs.promises.mkdir(snapshotDirectory, {
+            recursive: true,
+            mode: 0o700
+        });
+
+        const snapshotPath = path.join(
+            snapshotDirectory,
+            deployment.id + ".zip"
+        );
+
+        await fs.promises.writeFile(snapshotPath, buffer, {
+            flag: "wx",
+            mode: 0o600
+        });
+
         if (fs.existsSync(target)) {
             await fs.promises.rename(target, backup);
             backupCreated = true;
@@ -316,6 +355,104 @@ async function uploadBotArchive(bot, buffer) {
         return {
             files: result.fileCount,
             extractedBytes: result.totalSize,
+            directory: target,
+            snapshotId: deployment.id,
+            archiveHash
+        };
+
+    } catch (error) {
+        await fs.promises.rm(staging, {
+            recursive: true,
+            force: true
+        }).catch(() => {});
+
+        if (backupCreated && !fs.existsSync(target)) {
+            await fs.promises.rename(backup, target).catch(() => {});
+        }
+
+        throw error;
+    }
+}
+
+async function restoreBotArchive(bot, buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 4) {
+        throw new Error("Invalid snapshot archive.");
+    }
+
+    if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+        throw new Error("Snapshot is not a valid ZIP archive.");
+    }
+
+    if (!bot || !/^[0-9a-f-]{36}$/i.test(bot.id || "")) {
+        throw new Error("Invalid bot ID.");
+    }
+
+    await fs.promises.mkdir(BOTS_DIR, { recursive: true });
+
+    const target = path.join(BOTS_DIR, bot.id);
+    const staging = path.join(
+        BOTS_DIR,
+        ".restore-staging-" + crypto.randomUUID()
+    );
+    const backup = path.join(
+        BOTS_DIR,
+        ".restore-backup-" + crypto.randomUUID()
+    );
+
+    await fs.promises.mkdir(staging);
+
+    let backupCreated = false;
+
+    try {
+        const result = await extractZip(buffer, staging);
+
+        const entryPath = path.resolve(staging, bot.entry_file);
+        const entryRelative = path.relative(staging, entryPath);
+
+        if (
+            entryRelative.startsWith("..") ||
+            path.isAbsolute(entryRelative)
+        ) {
+            throw new Error("Invalid bot entry file path.");
+        }
+
+        const entryStat = await fs.promises
+            .stat(entryPath)
+            .catch(() => null);
+
+        if (!entryStat || !entryStat.isFile()) {
+            throw new Error(
+                `Entry file "${bot.entry_file}" was not found in the snapshot.`
+            );
+        }
+
+        if (fs.existsSync(target)) {
+            await fs.promises.rename(target, backup);
+            backupCreated = true;
+        }
+
+        try {
+            await fs.promises.rename(staging, target);
+        } catch (error) {
+            if (backupCreated) {
+                await fs.promises.rename(backup, target);
+                backupCreated = false;
+            }
+
+            throw error;
+        }
+
+        if (backupCreated) {
+            await fs.promises.rm(backup, {
+                recursive: true,
+                force: true
+            });
+            backupCreated = false;
+        }
+
+        return {
+            files: result.fileCount,
+            extractedBytes: result.totalSize,
             directory: target
         };
 
@@ -334,5 +471,6 @@ async function uploadBotArchive(bot, buffer) {
 }
 
 module.exports = {
-    uploadBotArchive
+    uploadBotArchive,
+    restoreBotArchive
 };

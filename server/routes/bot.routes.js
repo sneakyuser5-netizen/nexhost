@@ -15,6 +15,7 @@ router.post("/:id/upload", uploadLimiter, uploadBotFile, botController.uploadBot
 router.post("/:id/start", processController.start);
 router.post("/:id/stop", processController.stop);
 router.post("/:id/restart", processController.restart);
+router.post("/:id/rollback/:deploymentId", botController.rollbackDeployment);
 
 router.get("/", botController.listBots);
 router.get("/:id", botController.getBot);

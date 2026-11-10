@@ -1,11 +1,16 @@
 const crypto = require("node:crypto");
 const { db } = require("../../database/db");
 
-function recordUpload(botId, buffer, uploadResult) {
-    const hash = crypto
-        .createHash("sha256")
-        .update(buffer)
-        .digest("hex");
+function createDeployment(botId, options = {}) {
+    const {
+        sourceType = "upload",
+        archiveHash,
+        rollbackOf = null
+    } = options;
+
+    if (!archiveHash || !/^[a-f0-9]{64}$/.test(archiveHash)) {
+        throw new Error("Invalid deployment archive hash.");
+    }
 
     db.exec("BEGIN IMMEDIATE");
 
@@ -26,14 +31,17 @@ function recordUpload(botId, buffer, uploadResult) {
                 version,
                 status,
                 source_type,
-                source_ref
+                source_ref,
+                rollback_of
             )
-            VALUES (?, ?, ?, 'queued', 'upload', ?)
+            VALUES (?, ?, ?, 'queued', ?, ?, ?)
         `).run(
             id,
             botId,
             version,
-            `sha256:${hash}`
+            sourceType,
+            `sha256:${archiveHash}`,
+            rollbackOf
         );
 
         db.exec("COMMIT");
@@ -43,16 +51,59 @@ function recordUpload(botId, buffer, uploadResult) {
             botId,
             version,
             status: "queued",
-            sourceType: "upload",
-            archiveHash: hash,
-            files: uploadResult.files,
-            extractedBytes: uploadResult.extractedBytes
+            sourceType,
+            archiveHash,
+            rollbackOf
         };
 
     } catch (error) {
         db.exec("ROLLBACK");
         throw error;
     }
+}
+
+function createUploadDeployment(botId, buffer) {
+    const archiveHash = crypto
+        .createHash("sha256")
+        .update(buffer)
+        .digest("hex");
+
+    return createDeployment(botId, {
+        sourceType: "upload",
+        archiveHash
+    });
+}
+
+function createRollbackDeployment(botId, sourceDeployment) {
+    if (!sourceDeployment || sourceDeployment.bot_id !== botId) {
+        throw new Error("Invalid rollback source deployment.");
+    }
+
+    const match = String(sourceDeployment.source_ref || "")
+        .match(/^sha256:([a-f0-9]{64})$/);
+
+    if (!match) {
+        throw new Error("Source deployment has no valid archive hash.");
+    }
+
+    return createDeployment(botId, {
+        sourceType: "upload",
+        archiveHash: match[1],
+        rollbackOf: sourceDeployment.id
+    });
+}
+
+function markDeploymentFailed(deploymentId, error) {
+    db.prepare(`
+        UPDATE deployments
+        SET status = 'failed',
+            finished_at = CURRENT_TIMESTAMP,
+            error_message = ?
+        WHERE id = ?
+    `).run(
+        String(error?.message || error || "Deployment failed").slice(0, 1000),
+        deploymentId
+    );
 }
 
 function listDeployments(botId) {
@@ -64,6 +115,7 @@ function listDeployments(botId) {
             status,
             source_type,
             source_ref,
+            rollback_of,
             started_at,
             finished_at,
             error_message,
@@ -75,6 +127,8 @@ function listDeployments(botId) {
 }
 
 module.exports = {
-    recordUpload,
+    createUploadDeployment,
+    createRollbackDeployment,
+    markDeploymentFailed,
     listDeployments
 };

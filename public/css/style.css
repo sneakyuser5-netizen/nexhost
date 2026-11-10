@@ -523,6 +523,39 @@ input:focus {
     color: #a9e8c9;
 }
 
+
+.log-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.log-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.log-output {
+    min-height: 220px;
+    max-height: 52vh;
+    overflow: auto;
+    margin: 0;
+}
+
+.log-error {
+    color: #ff8585;
+}
+
+.log-warning {
+    color: #ffd479;
+}
+
 .toast {
     position: fixed;
     z-index: 20;

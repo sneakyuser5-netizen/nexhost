@@ -275,10 +275,13 @@ module.exports = {
     updateBot,
     deleteBot,
     uploadBotFiles,
-    listDeployments
+    listDeployments,
+    rollbackDeployment
 };
 
 async function uploadBotFiles(req, res) {
+    let deployment = null;
+
     try {
         const bot = db.prepare(`
             SELECT id, owner_id, entry_file, status
@@ -300,15 +303,32 @@ async function uploadBotFiles(req, res) {
             });
         }
 
+        if (!req.file || !Buffer.isBuffer(req.file.buffer)) {
+            return res.status(400).json({
+                success: false,
+                message: "A ZIP archive is required."
+            });
+        }
+
+        deployment = deploymentService.createUploadDeployment(
+            bot.id,
+            req.file.buffer
+        );
+
         const { uploadBotArchive } = require("../services/bot-upload.service");
 
-        const result = await uploadBotArchive(bot, req.file.buffer);
-
-        const deployment = deploymentService.recordUpload(
-            bot.id,
+        const result = await uploadBotArchive(
+            bot,
             req.file.buffer,
-            result
+            deployment
         );
+
+        db.prepare(`
+            UPDATE deployments
+            SET status = 'stopped',
+                finished_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(deployment.id);
 
         db.prepare(`
             UPDATE bots
@@ -318,16 +338,33 @@ async function uploadBotFiles(req, res) {
 
         return res.json({
             success: true,
-            message: "Bot source uploaded and deployment recorded.",
+            message: "Bot source uploaded and snapshot saved.",
             upload: {
                 botId: bot.id,
                 files: result.files,
-                extractedBytes: result.extractedBytes
+                extractedBytes: result.extractedBytes,
+                snapshotId: result.snapshotId,
+                archiveHash: result.archiveHash
             },
-            deployment
+            deployment: {
+                ...deployment,
+                status: "stopped",
+                finishedAt: new Date().toISOString()
+            }
         });
 
     } catch (error) {
+        if (deployment) {
+            try {
+                deploymentService.markDeploymentFailed(
+                    deployment.id,
+                    error
+                );
+            } catch (markError) {
+                console.error("[DEPLOYMENT FAILURE]", markError.message);
+            }
+        }
+
         console.error("[BOT UPLOAD]", error.message);
 
         return res.status(400).json({
@@ -368,6 +405,143 @@ function listDeployments(req, res) {
         return res.status(500).json({
             success: false,
             message: "Unable to retrieve deployment history."
+        });
+    }
+}
+
+
+async function rollbackDeployment(req, res) {
+    let rollback = null;
+
+    try {
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const crypto = require("node:crypto");
+
+        const bot = db.prepare(`
+            SELECT id, owner_id, entry_file, status
+            FROM bots
+            WHERE id = ? AND owner_id = ?
+        `).get(req.params.id, req.user.id);
+
+        if (!bot) {
+            return res.status(404).json({
+                success: false,
+                message: "Bot not found."
+            });
+        }
+
+        if (bot.status !== "stopped") {
+            return res.status(409).json({
+                success: false,
+                message: "Stop the bot before rolling back."
+            });
+        }
+
+        const original = db.prepare(`
+            SELECT id, bot_id, version, source_type, source_ref
+            FROM deployments
+            WHERE id = ? AND bot_id = ?
+        `).get(req.params.deploymentId, bot.id);
+
+        if (!original) {
+            return res.status(404).json({
+                success: false,
+                message: "Deployment version not found."
+            });
+        }
+
+        const match = String(original.source_ref || "")
+            .match(/^sha256:([a-f0-9]{64})$/);
+
+        if (!match) {
+            return res.status(400).json({
+                success: false,
+                message: "Deployment has no valid snapshot hash."
+            });
+        }
+
+        if (!/^[0-9a-f-]{36}$/i.test(bot.id) ||
+            !/^[0-9a-f-]{36}$/i.test(original.id)) {
+            throw new Error("Invalid snapshot identifiers.");
+        }
+
+        const snapshotPath = path.resolve(
+            __dirname,
+            "../../storage/snapshots",
+            bot.id,
+            original.id + ".zip"
+        );
+
+        const snapshotStat = await fs.promises.lstat(snapshotPath);
+
+        if (!snapshotStat.isFile() || snapshotStat.isSymbolicLink()) {
+            throw new Error("Deployment snapshot is not a regular file.");
+        }
+
+        const archive = await fs.promises.readFile(snapshotPath);
+
+        const actualHash = crypto
+            .createHash("sha256")
+            .update(archive)
+            .digest("hex");
+
+        if (actualHash !== match[1]) {
+            throw new Error("Snapshot integrity verification failed.");
+        }
+
+        rollback = deploymentService.createRollbackDeployment(
+            bot.id,
+            original
+        );
+
+        const { restoreBotArchive } = require("../services/bot-upload.service");
+
+        const result = await restoreBotArchive(bot, archive);
+
+        db.prepare(`
+            UPDATE deployments
+            SET status = 'stopped',
+                finished_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(rollback.id);
+
+        db.prepare(`
+            UPDATE bots
+            SET updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND owner_id = ?
+        `).run(bot.id, req.user.id);
+
+        return res.json({
+            success: true,
+            message: "Bot successfully rolled back.",
+            rollback: {
+                deploymentId: rollback.id,
+                version: rollback.version,
+                rollbackOf: original.id,
+                restoredVersion: original.version,
+                files: result.files,
+                extractedBytes: result.extractedBytes
+            }
+        });
+
+    } catch (error) {
+        if (rollback) {
+            try {
+                deploymentService.markDeploymentFailed(
+                    rollback.id,
+                    error
+                );
+            } catch (markError) {
+                console.error("[ROLLBACK FAILURE]", markError.message);
+            }
+        }
+
+        console.error("[BOT ROLLBACK]", error.message);
+
+        return res.status(400).json({
+            success: false,
+            message: error.message || "Unable to roll back deployment."
         });
     }
 }

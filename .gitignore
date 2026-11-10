@@ -1,5 +1,4 @@
 node_modules/
-database/
 .env
 storage/bots/*
 storage/sessions/*
@@ -8,3 +7,8 @@ uploads/*
 *.log
 .DS_Store
 storage/*.sqlite*
+
+# Local database files
+database/*.sqlite
+database/*.sqlite-*
+database/*.db
