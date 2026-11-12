@@ -12,3 +12,13 @@ storage/*.sqlite*
 database/*.sqlite
 database/*.sqlite-*
 database/*.db
+
+# Backups - never push
+*.bak
+*.bak-*
+*.bak.*
+*.pre-resource-guard
+storage/pre-*/
+storage/pre-*
+storage/*.pid
+storage/nexhost-server.pid

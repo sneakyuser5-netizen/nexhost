@@ -43,7 +43,8 @@
     </section>
 
     <div id="dashboard" class="dashboard hidden">
-        <aside class="sidebar">
+        <div id="mobile-nav-overlay" class="mobile-nav-overlay hidden"></div>
+        <aside id="main-sidebar" class="sidebar">
             <div class="brand">
                 <span class="brand-icon">N</span>
                 <span>NEXHOST</span>
@@ -63,6 +64,13 @@
                 <span>⇧</span> Deployments
             </button>
 
+            <button class="nav-item" data-view="account">
+                <span>◉</span> Account
+            </button>
+            <button class="nav-item" data-view="settings">
+                <span>⚙</span> Settings
+            </button>
+
             <div class="sidebar-bottom">
                 <div class="user-box">
                     <div class="avatar">U</div>
@@ -75,8 +83,27 @@
             </div>
         </aside>
 
+        <button
+            id="sidebar-backdrop"
+            class="sidebar-backdrop"
+            type="button"
+            aria-label="Close navigation"
+        ></button>
+
         <main class="main-content">
             <header class="topbar">
+                <button
+                    id="mobile-menu-toggle"
+                    class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Open navigation"
+                    aria-expanded="false"
+                    aria-controls="main-sidebar"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
                 <div>
                     <h1 id="page-title">Overview</h1>
                     <p class="muted">Manage your Node.js bots.</p>
@@ -151,6 +178,112 @@
                     <p class="muted">Loading deployments...</p>
                 </div>
             </section>
+
+            <section id="view-account" class="view hidden">
+                <div class="section-heading">
+                    <div>
+                        <h2>Account Information</h2>
+                        <p class="muted">View your NEXHOST account details.</p>
+                    </div>
+                </div>
+
+                <div class="panel account-profile">
+                    <div class="account-profile-header">
+                        <div class="avatar account-avatar" id="account-avatar">U</div>
+                        <div>
+                            <h2 id="account-email">Loading...</h2>
+                            <span class="muted">NEXHOST Account</span>
+                        </div>
+                    </div>
+
+                    <div class="account-details-grid">
+                        <div class="stat-card">
+                            <span>Account ID</span>
+                            <strong id="account-id">Loading...</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Email Address</span>
+                            <strong id="account-email-detail">Loading...</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Account Role</span>
+                            <strong id="account-role">Loading...</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Registration Date</span>
+                            <strong id="account-created">Loading...</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Last Updated</span>
+                            <strong id="account-updated">Loading...</strong>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-settings" class="view hidden">
+                <div class="section-heading">
+                    <div>
+                        <h2>Dashboard Settings</h2>
+                        <p class="muted">Customize your NEXHOST experience.</p>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <div class="settings-group-heading">
+                        <h3>Appearance</h3>
+                        <p class="muted">Choose your preferred dashboard theme.</p>
+                    </div>
+                    <div class="panel settings-item">
+                        <div>
+                            <strong>Dashboard Theme</strong>
+                            <p class="muted">Switch between dark and light mode.</p>
+                        </div>
+                        <select id="theme-select" class="settings-select">
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <div class="settings-group-heading">
+                        <h3>Dashboard Preferences</h3>
+                        <p class="muted">Control your dashboard display.</p>
+                    </div>
+                    <div class="panel settings-item">
+                        <div>
+                            <strong>Resource Monitoring</strong>
+                            <p class="muted">Show live CPU and memory monitoring.</p>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" id="resource-toggle" checked>
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="panel settings-item">
+                    <div>
+                        <strong>Reset Preferences</strong>
+                        <p class="muted">Restore default dashboard settings.</p>
+                    </div>
+                    <button id="reset-settings" class="small-btn danger">Reset</button>
+                </div>
+
+                <div class="settings-actions">
+                    <button id="save-settings" class="settings-save-btn">
+                        Save Changes
+                    </button>
+                </div>
+
+                <p id="settings-feedback" class="settings-feedback"></p>
+            </section>
+
         </main>
     </div>
 

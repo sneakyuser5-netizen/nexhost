@@ -155,10 +155,32 @@ async function login(req, res) {
 }
 
 function me(req, res) {
-    return res.json({
-        success: true,
-        user: req.user
-    });
+    try {
+        const user = db.prepare(`
+            SELECT id, email, role, created_at, updated_at
+            FROM users
+            WHERE id = ?
+        `).get(req.user.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "Account not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            user
+        });
+    } catch (error) {
+        console.error("[AUTH ME]", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to retrieve account details."
+        });
+    }
 }
 
 function logout(req, res) {

@@ -65,12 +65,55 @@ function showAuth() {
     $("#dashboard").classList.add("hidden");
 }
 
-function showDashboard() {
+async function showDashboard() {
     $("#auth-screen").classList.add("hidden");
     $("#dashboard").classList.remove("hidden");
-    $("#user-email").textContent = currentUser.email;
-    $("#page-title").textContent = "Overview";
-    loadBots();
+
+    try {
+        if (!currentUser || !currentUser.created_at) {
+            const result = await api("/auth/me");
+            currentUser = result.user;
+        }
+
+        $("#user-email").textContent = currentUser.email;
+        $("#page-title").textContent = "Overview";
+
+        renderAccount();
+        loadBots();
+    } catch (error) {
+        console.error("[ACCOUNT]", error);
+        logout(false);
+    }
+}
+
+function renderAccount() {
+    if (!currentUser) return;
+
+    const formatDate = value => {
+        if (!value) return "Not available";
+
+        const date = new Date(
+            value.includes("Z") || value.includes("+")
+                ? value
+                : value.replace(" ", "T") + "Z"
+        );
+
+        return Number.isNaN(date.getTime())
+            ? value
+            : date.toLocaleString();
+    };
+
+    $("#account-avatar").textContent =
+        currentUser.email.charAt(0).toUpperCase();
+
+    $("#account-email").textContent = currentUser.email;
+    $("#account-email-detail").textContent = currentUser.email;
+    $("#account-id").textContent = currentUser.id;
+    $("#account-role").textContent = currentUser.role;
+    $("#account-created").textContent =
+        formatDate(currentUser.created_at);
+    $("#account-updated").textContent =
+        formatDate(currentUser.updated_at);
 }
 
 function setAuthMode(mode) {
@@ -130,6 +173,101 @@ async function logout(sendRequest = true) {
     showAuth();
 }
 
+const DEFAULT_SETTINGS = {
+    theme: "dark",
+    resources: true
+};
+
+const SETTINGS_STORAGE_KEY = "nexhost_dashboard_settings";
+
+let savedSettings = { ...DEFAULT_SETTINGS };
+let currentSettings = { ...DEFAULT_SETTINGS };
+
+function loadSavedSettings() {
+    try {
+        const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+
+        if (stored) {
+            const parsed = JSON.parse(stored);
+
+            savedSettings = {
+                theme: parsed.theme === "light" ? "light" : "dark",
+                resources: parsed.resources !== false
+            };
+        }
+    } catch (error) {
+        console.error("[SETTINGS] Could not load preferences:", error);
+        savedSettings = { ...DEFAULT_SETTINGS };
+    }
+
+    currentSettings = { ...savedSettings };
+    applySettings();
+}
+
+function applySettings() {
+    document.documentElement.dataset.theme = currentSettings.theme;
+    document.documentElement.style.colorScheme = currentSettings.theme;
+
+    const resourceGrid = $("#resource-grid");
+
+    if (resourceGrid) {
+        resourceGrid.hidden = !currentSettings.resources;
+
+        const heading = resourceGrid.previousElementSibling;
+
+        if (heading) {
+            heading.hidden = !currentSettings.resources;
+        }
+    }
+}
+
+function renderSettings() {
+    $("#theme-select").value = currentSettings.theme;
+    $("#resource-toggle").checked = currentSettings.resources;
+}
+
+function showSettingsFeedback(message, type = "") {
+    const feedback = $("#settings-feedback");
+
+    if (!feedback) return;
+
+    feedback.textContent = message;
+    feedback.className = `settings-feedback ${type}`;
+}
+
+function saveSettings() {
+    try {
+        localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(currentSettings)
+        );
+
+        savedSettings = { ...currentSettings };
+
+        showSettingsFeedback(
+            "Your preferences have been saved.",
+            "success"
+        );
+    } catch (error) {
+        console.error("[SETTINGS] Save failed:", error);
+        showSettingsFeedback(
+            "Could not save your preferences.",
+            "error"
+        );
+    }
+}
+
+function resetSettings() {
+    currentSettings = { ...DEFAULT_SETTINGS };
+
+    applySettings();
+    renderSettings();
+
+    showSettingsFeedback(
+        "Default settings restored. Click Save Changes to keep them."
+    );
+}
+
 function switchView(view) {
     document.querySelectorAll(".view").forEach(section => {
         section.classList.add("hidden");
@@ -144,12 +282,19 @@ function switchView(view) {
     const titles = {
         overview: "Overview",
         bots: "My Bots",
-        deployments: "Deployments"
+        deployments: "Deployments",
+        account: "Account",
+        settings: "Settings"
     };
 
     $("#page-title").textContent = titles[view] || "Overview";
 
     if (view === "deployments") loadAllDeployments();
+
+    if (view === "settings") {
+        renderSettings();
+        showSettingsFeedback("");
+    }
 }
 
 function statusBadge(status) {
@@ -288,7 +433,11 @@ let resourceRequestRunning = false;
 async function loadResources() {
     const target = $("#resource-grid");
 
-    if (!target || resourceRequestRunning) return;
+    if (
+        !target ||
+        !currentSettings.resources ||
+        resourceRequestRunning
+    ) return;
 
     if (!bots.length) {
         target.innerHTML = `
@@ -602,12 +751,46 @@ async function checkSession() {
     }
 }
 
+function closeMobileNav() {
+    const dashboard = $("#dashboard");
+    const overlay = $("#mobile-nav-overlay");
+    const menuButton = $("#mobile-menu-toggle");
+
+    dashboard.classList.remove("mobile-nav-open");
+
+    if (overlay) overlay.classList.add("hidden");
+
+    if (menuButton) {
+        menuButton.setAttribute("aria-expanded", "false");
+        menuButton.setAttribute("aria-label", "Open navigation");
+    }
+}
+
+function toggleMobileNav() {
+    const dashboard = $("#dashboard");
+    const overlay = $("#mobile-nav-overlay");
+    const menuButton = $("#mobile-menu-toggle");
+
+    const isOpen = dashboard.classList.toggle("mobile-nav-open");
+
+    if (overlay) overlay.classList.toggle("hidden", !isOpen);
+
+    if (menuButton) {
+        menuButton.setAttribute("aria-expanded", String(isOpen));
+        menuButton.setAttribute(
+            "aria-label",
+            isOpen ? "Close navigation" : "Open navigation"
+        );
+    }
+}
+
 document.addEventListener("click", event => {
     const authTab = event.target.closest("[data-auth]");
     if (authTab) setAuthMode(authTab.dataset.auth);
 
     const nav = event.target.closest("[data-view]");
     if (nav) switchView(nav.dataset.view);
+    if (nav) closeMobileNav();
 
     const close = event.target.closest("[data-close]");
     if (close) $(`#${close.dataset.close}`).classList.add("hidden");
@@ -682,6 +865,33 @@ $("#new-bot-btn").addEventListener("click", () => {
 });
 $("#logout-btn").addEventListener("click", () => logout(true));
 
+$("#mobile-menu-toggle").addEventListener("click", toggleMobileNav);
+
+$("#mobile-nav-overlay").addEventListener("click", closeMobileNav);
+
+
+$("#theme-select").addEventListener("change", event => {
+    currentSettings.theme =
+        event.target.value === "light" ? "light" : "dark";
+
+    applySettings();
+    showSettingsFeedback("Theme preview changed. Save to keep it.");
+});
+
+$("#resource-toggle").addEventListener("change", event => {
+    currentSettings.resources = event.target.checked;
+
+    applySettings();
+    showSettingsFeedback(
+        "Display preference changed. Save to keep it."
+    );
+});
+
+$("#save-settings").addEventListener("click", saveSettings);
+$("#reset-settings").addEventListener("click", resetSettings);
+
+
+loadSavedSettings();
 checkSession();
 
 setInterval(() => {
@@ -705,3 +915,55 @@ setInterval(() => {
         }
     }
 }, 3000);
+
+
+/* MOBILE NAVIGATION CONTROLLER */
+(() => {
+    const menuButton = document.getElementById("mobile-menu-toggle");
+    const sidebar = document.getElementById("main-sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+
+    if (!menuButton || !sidebar || !backdrop) return;
+
+    function openMobileNav() {
+        if (window.innerWidth > 800) return;
+
+        sidebar.classList.add("is-open");
+        backdrop.classList.add("is-visible");
+        document.body.classList.add("nav-open");
+
+        menuButton.setAttribute("aria-expanded", "true");
+        menuButton.setAttribute("aria-label", "Close navigation");
+    }
+
+    function closeMobileNav() {
+        sidebar.classList.remove("is-open");
+        backdrop.classList.remove("is-visible");
+        document.body.classList.remove("nav-open");
+
+        menuButton.setAttribute("aria-expanded", "false");
+        menuButton.setAttribute("aria-label", "Open navigation");
+    }
+
+    menuButton.addEventListener("click", () => {
+        if (sidebar.classList.contains("is-open")) {
+            closeMobileNav();
+        } else {
+            openMobileNav();
+        }
+    });
+
+    backdrop.addEventListener("click", closeMobileNav);
+
+    sidebar.querySelectorAll(".nav-item").forEach(button => {
+        button.addEventListener("click", closeMobileNav);
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeMobileNav();
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 800) closeMobileNav();
+    });
+})();
