@@ -22,3 +22,7 @@ storage/pre-*/
 storage/pre-*
 storage/*.pid
 storage/nexhost-server.pid
+
+# Before-help backups
+*.before-help
+*.before-*

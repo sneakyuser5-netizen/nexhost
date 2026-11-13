@@ -39,6 +39,37 @@
             </form>
 
             <p id="auth-error" class="error-text"></p>
+
+            <button type="button" id="forgot-password-link" class="text-link">
+                Forgot your password?
+            </button>
+
+            <form id="forgot-password-form" class="hidden">
+                <h3>Reset your password</h3>
+                <p class="muted">Enter your account email. If it exists, we will send a reset link.</p>
+                <label>Email Address</label>
+                <input id="forgot-email" type="email" required autocomplete="email">
+                <button id="forgot-submit" class="primary-btn full-btn" type="submit">
+                    Send Reset Link
+                </button>
+                <p id="forgot-error" class="error-text"></p>
+                <button type="button" class="text-link" data-auth-back>Back to Login</button>
+            </form>
+
+            <form id="reset-password-form" class="hidden">
+                <h3>Choose a new password</h3>
+                <label>New Password</label>
+                <input id="reset-password" type="password" required minlength="10"
+                    maxlength="128" autocomplete="new-password">
+                <label>Confirm New Password</label>
+                <input id="reset-password-confirm" type="password" required minlength="10"
+                    maxlength="128" autocomplete="new-password">
+                <button id="reset-submit" class="primary-btn full-btn" type="submit">
+                    Reset Password
+                </button>
+                <p id="reset-error" class="error-text"></p>
+                <button type="button" class="text-link" data-auth-back>Back to Login</button>
+            </form>
         </div>
     </section>
 
@@ -69,6 +100,12 @@
             </button>
             <button class="nav-item" data-view="settings">
                 <span>⚙</span> Settings
+            </button>
+
+            <div class="side-label">RESOURCES</div>
+
+            <button class="nav-item" data-view="help">
+                <span>?</span> Help & Support
             </button>
 
             <div class="sidebar-bottom">
@@ -223,6 +260,30 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="panel password-panel">
+                    <h3>Change Password</h3>
+                    <p class="muted">Update your account password. Other active sessions will be signed out.</p>
+
+                    <form id="change-password-form">
+                        <label>Current Password</label>
+                        <input id="current-password" type="password" required
+                            autocomplete="current-password">
+
+                        <label>New Password</label>
+                        <input id="new-password" type="password" required minlength="10"
+                            maxlength="128" autocomplete="new-password">
+
+                        <label>Confirm New Password</label>
+                        <input id="confirm-new-password" type="password" required minlength="10"
+                            maxlength="128" autocomplete="new-password">
+
+                        <button id="change-password-submit" class="primary-btn" type="submit">
+                            Change Password
+                        </button>
+                        <p id="change-password-message" class="muted"></p>
+                    </form>
+                </div>
             </section>
 
             <section id="view-settings" class="view hidden">
@@ -282,6 +343,228 @@
                 </div>
 
                 <p id="settings-feedback" class="settings-feedback"></p>
+            </section>
+
+
+            <section id="view-help" class="view hidden">
+                <div class="welcome-panel">
+                    <div>
+                        <span class="eyebrow">NEXHOST RESOURCES</span>
+                        <h2>Help is always within reach.</h2>
+                        <p>Find answers, understand our policies and learn how to use NEXHOST.</p>
+                    </div>
+                    <div class="welcome-symbol">?</div>
+                </div>
+
+                <div class="help-card-grid">
+                    <a href="#help-faq" class="panel help-card">
+                        <span class="help-icon">?</span>
+                        <h3>Frequently Asked Questions</h3>
+                        <p class="muted">Find answers to common questions.</p>
+                    </a>
+
+                    <a href="#help-terms" class="panel help-card">
+                        <span class="help-icon">§</span>
+                        <h3>Terms & Conditions</h3>
+                        <p class="muted">Understand the rules of using NEXHOST.</p>
+                    </a>
+
+                    <a href="#help-privacy" class="panel help-card">
+                        <span class="help-icon">◇</span>
+                        <h3>Privacy Policy</h3>
+                        <p class="muted">Learn how account and application information is handled.</p>
+                    </a>
+
+                    <a href="#help-contact" class="panel help-card">
+                        <span class="help-icon">✉</span>
+                        <h3>Contact Support</h3>
+                        <p class="muted">Find information about getting assistance.</p>
+                    </a>
+                </div>
+
+                <div class="panel help-content" id="help-faq">
+                    <span class="eyebrow">HELP CENTER</span>
+                    <h2>Frequently Asked Questions</h2>
+
+                    <details class="help-faq-item">
+                        <summary>What is NEXHOST?</summary>
+                        <p>NEXHOST is a Node.js bot hosting platform that lets users create, upload, start, stop and manage their bot applications.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>How do I create a bot?</summary>
+                        <p>Open My Bots, select Create Bot, enter a bot name and entry file, then create your application.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>How do I upload my bot files?</summary>
+                        <p>Open your bot and use the Upload ZIP option to upload its source files.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>Which runtime does NEXHOST support?</summary>
+                        <p>The current hosting engine supports Node.js applications.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>How can I change my password?</summary>
+                        <p>Open Account, find Change Password, enter your current password and choose a new password.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>What if I forget my password?</summary>
+                        <p>Use Forgot Password on the login screen and follow the instructions sent to your registered email address.</p>
+                    </details>
+
+                    <details class="help-faq-item">
+                        <summary>Can I monitor my bots?</summary>
+                        <p>The dashboard provides bot status, deployment history and resource-monitoring features where available.</p>
+                    </details>
+                </div>
+
+                <div class="panel help-content" id="help-terms">
+                    <span class="eyebrow">PLATFORM RULES</span>
+                    <h2>Terms & Conditions</h2>
+                    <p class="muted">Last updated: November 13, 2026</p>
+
+                    <h3>1. Acceptance of Terms</h3>
+                    <p>By creating an account or using NEXHOST, you agree to follow these terms. If you do not agree, you should stop using the platform.</p>
+
+                    <h3>2. Account Responsibility</h3>
+                    <p>You are responsible for keeping your login credentials secure and for activities performed through your account. Provide accurate account information and do not share access without authorization.</p>
+
+                    <h3>3. Acceptable Use</h3>
+                    <p>You must not use NEXHOST to host malware, conduct unauthorized access, distribute illegal content, send abusive traffic, attack other systems or violate applicable laws.</p>
+
+                    <h3>4. Application Responsibility</h3>
+                    <p>You are responsible for the source code, dependencies, data and behavior of applications you upload or run. You must have the necessary rights to use the files and services included in your applications.</p>
+
+                    <h3>5. Platform Availability</h3>
+                    <p>NEXHOST may experience maintenance, interruptions, failures or changes. Continuous availability is not guaranteed. Keep independent backups of important application files and data.</p>
+
+                    <h3>6. Suspension and Termination</h3>
+                    <p>Accounts or applications may be restricted or suspended when necessary to address abuse, security threats, unlawful activity or violations of these terms, subject to applicable law.</p>
+
+                    <h3>7. Changes to These Terms</h3>
+                    <p>These terms may be updated as NEXHOST develops. Continued use after an update constitutes acceptance where permitted by applicable law.</p>
+
+                    <h3>8. Contact</h3>
+                    <p>Questions about these terms should be directed through the NEXHOST support channel once its contact details are published.</p>
+                </div>
+
+                <div class="panel help-content" id="help-privacy">
+                    <span class="eyebrow">YOUR INFORMATION</span>
+                    <h2>Privacy Policy</h2>
+                    <p class="muted">Last updated: November 13, 2026</p>
+
+                    <h3>1. Information We Handle</h3>
+                    <p>NEXHOST handles account information such as email addresses, password hashes, session records, bot information and deployment records to operate the hosting platform.</p>
+
+                    <h3>2. Password Security</h3>
+                    <p>Passwords are stored as cryptographic password hashes rather than plain-text passwords. Authentication sessions use generated tokens.</p>
+
+                    <h3>3. How Information Is Used</h3>
+                    <p>Information is used to authenticate users, manage applications, maintain deployments, provide platform functionality and protect the service.</p>
+
+                    <h3>4. Storage and Protection</h3>
+                    <p>NEXHOST uses database storage and security controls to protect platform information. No method of electronic storage or transmission can be guaranteed completely secure.</p>
+
+                    <h3>5. Data Retention</h3>
+                    <p>Information may be retained for as long as needed to provide the service, maintain security, meet legal obligations or resolve disputes.</p>
+
+                    <h3>6. Your Choices</h3>
+                    <p>Keep your account credentials secure. For questions about access, correction or deletion of account information, contact the platform operator through the support channel once published.</p>
+
+                    <h3>7. Policy Updates</h3>
+                    <p>This policy may change as platform features and legal requirements evolve. Updated versions will be published here.</p>
+                </div>
+
+                <div class="panel help-content" id="help-contact">
+                    <span class="eyebrow">NEXHOST SUPPORT CENTER</span>
+                    <h2>Contact Support</h2>
+                    <p>Submit a support ticket and communicate with the NEXHOST support team.</p>
+
+                    <div class="support-layout">
+                        <div class="support-form-panel">
+                            <h3>Submit a Ticket</h3>
+                            <form id="support-ticket-form">
+                                <label for="support-subject">Subject</label>
+                                <input id="support-subject" required minlength="5" maxlength="120"
+                                    placeholder="Briefly describe your issue">
+
+                                <label for="support-category">Category</label>
+                                <select id="support-category" required>
+                                    <option value="technical">Technical Issue</option>
+                                    <option value="account">Account</option>
+                                    <option value="billing">Billing</option>
+                                    <option value="deployment">Deployment</option>
+                                    <option value="other">Other</option>
+                                </select>
+
+                                <label for="support-priority">Priority</label>
+                                <select id="support-priority" required>
+                                    <option value="low">Low</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="high">High</option>
+                                    <option value="urgent">Urgent</option>
+                                </select>
+
+                                <label for="support-message">Message</label>
+                                <textarea id="support-message" required minlength="10"
+                                    maxlength="5000" rows="5"
+                                    placeholder="Explain the issue and what you have tried..."></textarea>
+
+                                <button class="primary-btn" type="submit">Submit Ticket</button>
+                                <p id="support-form-feedback" class="settings-feedback" aria-live="polite"></p>
+                            </form>
+                        </div>
+
+                        <div class="support-list-panel">
+                            <div class="support-list-heading">
+                                <div>
+                                    <h3>My Tickets</h3>
+                                    <p class="muted">Track your support requests.</p>
+                                </div>
+                                <button type="button" class="secondary-btn" id="refresh-support-tickets">Refresh</button>
+                            </div>
+                            <div id="support-ticket-list">
+                                <p class="muted">Your tickets will appear here.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="support-conversation hidden" id="support-conversation">
+                        <div class="support-list-heading">
+                            <div>
+                                <span class="eyebrow">TICKET CONVERSATION</span>
+                                <h3 id="support-conversation-title">Ticket</h3>
+                            </div>
+                            <button type="button" class="secondary-btn" data-action="support-back">Back to Tickets</button>
+                        </div>
+
+                        <div id="support-ticket-details"></div>
+                        <div id="support-messages" class="support-messages"></div>
+
+                        <form id="support-reply-form">
+                            <label for="support-reply">Your Reply</label>
+                            <textarea id="support-reply" required minlength="1"
+                                maxlength="5000" rows="4"
+                                placeholder="Write your reply..."></textarea>
+                            <button class="primary-btn" type="submit">Send Reply</button>
+                        </form>
+
+                        <div id="support-admin-controls" class="hidden">
+                            <label for="support-status-select">Ticket Status</label>
+                            <select id="support-status-select">
+                                <option value="open">Open</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="resolved">Resolved</option>
+                                <option value="closed">Closed</option>
+                            </select>
+                            <button type="button" class="secondary-btn" data-action="support-status">Update Status</button>
+                        </div>
+                    </div>
+                </div>
             </section>
 
         </main>

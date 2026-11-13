@@ -8,6 +8,7 @@ const app = express();
 
 const authRoutes = require("./routes/auth.routes");
 const botRoutes = require("./routes/bot.routes");
+const supportRoutes = require("./routes/support.routes");
 
 app.disable("x-powered-by");
 
@@ -19,7 +20,13 @@ app.use(express.json({
 
 app.use("/api", apiLimiter);
 
+
 app.use(express.static(path.resolve(__dirname, "../public")));
+
+app.get("/reset-password", (req, res) => {
+    res.sendFile(path.resolve(__dirname, "../public/index.html"));
+});
+
 
 app.get("/api/health", (req, res) => {
     res.json({
@@ -31,5 +38,6 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/bots", botRoutes);
+app.use("/api/support", supportRoutes);
 
 module.exports = app;

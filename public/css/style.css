@@ -1404,3 +1404,324 @@ input:focus {
     border-color: var(--border);
 }
 
+
+/* PASSWORD SECURITY */
+.text-link {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 5px;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.text-link:hover {
+    text-decoration: underline;
+}
+
+#forgot-password-form,
+#reset-password-form {
+    width: 100%;
+    text-align: left;
+    margin-top: 20px;
+}
+
+#forgot-password-form h3,
+#reset-password-form h3,
+.password-panel h3 {
+    margin: 0 0 12px;
+}
+
+#forgot-password-form .muted,
+#reset-password-form .muted,
+.password-panel .muted {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.password-panel {
+    margin-top: 22px;
+    padding: 24px;
+}
+
+.password-panel form {
+    max-width: 480px;
+}
+
+.password-panel input {
+    margin-bottom: 5px;
+}
+
+.password-panel button {
+    margin-top: 20px;
+}
+
+#change-password-message {
+    margin-top: 12px;
+    overflow-wrap: anywhere;
+}
+
+
+
+/* NEXHOST HELP & SUPPORT */
+.help-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+}
+
+.help-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: transform .2s ease, border-color .2s ease;
+}
+
+.help-card:hover {
+    transform: translateY(-3px);
+    border-color: #8b75ff;
+}
+
+.help-icon {
+    display: inline-flex;
+    width: 42px;
+    height: 42px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(139, 117, 255, .16);
+    color: #a99aff;
+    font-size: 23px;
+    margin-bottom: 14px;
+}
+
+.help-card h3 {
+    margin: 0 0 8px;
+}
+
+.help-card p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.help-content {
+    margin: 24px 0;
+    scroll-margin-top: 24px;
+    line-height: 1.75;
+}
+
+.help-content h2 {
+    margin: 8px 0 16px;
+}
+
+.help-content h3 {
+    margin: 24px 0 6px;
+}
+
+.help-content p {
+    line-height: 1.75;
+}
+
+.help-faq-item {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,.1));
+}
+
+.help-faq-item summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.help-faq-item p {
+    margin-bottom: 0;
+    color: var(--muted, #9ca3af);
+}
+
+.support-notice {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 14px;
+    background: var(--panel2);
+}
+
+.support-notice p:last-child {
+    margin-bottom: 0;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+@media (max-width: 600px) {
+    .help-card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .help-content {
+        padding: 18px;
+    }
+}
+
+/* NEXHOST SUPPORT CENTER */
+.support-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 22px;
+    margin-top: 24px;
+}
+
+.support-form-panel,
+.support-list-panel,
+.support-conversation {
+    background: var(--panel, rgba(255,255,255,.03));
+    border: 1px solid var(--border, rgba(255,255,255,.1));
+    border-radius: 14px;
+    padding: 20px;
+    min-width: 0;
+}
+
+.support-layout h3,
+.support-conversation h3 {
+    margin-top: 0;
+}
+
+.support-form-panel form,
+.support-conversation form {
+    display: grid;
+    gap: 12px;
+}
+
+.support-form-panel input,
+.support-form-panel select,
+.support-form-panel textarea,
+.support-conversation textarea,
+.support-conversation select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid var(--border, rgba(255,255,255,.15));
+    border-radius: 9px;
+    background: var(--input-bg, rgba(255,255,255,.04));
+    color: inherit;
+    font: inherit;
+}
+
+.support-form-panel textarea,
+.support-conversation textarea {
+    resize: vertical;
+}
+
+.support-list-heading,
+.support-message-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.support-ticket-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    margin-top: 10px;
+    border: 1px solid var(--border, rgba(255,255,255,.12));
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.support-ticket-item:hover {
+    border-color: var(--accent, #777);
+}
+
+.support-ticket-item > span:first-child {
+    display: grid;
+    gap: 5px;
+}
+
+.support-ticket-item small,
+.support-message small {
+    opacity: .65;
+}
+
+.support-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    white-space: nowrap;
+    background: rgba(150,150,150,.15);
+}
+
+.support-status.open {
+    background: rgba(40,150,255,.15);
+}
+
+.support-status.in_progress {
+    background: rgba(255,170,40,.15);
+}
+
+.support-status.resolved {
+    background: rgba(40,190,120,.15);
+}
+
+.support-status.closed {
+    background: rgba(150,150,150,.2);
+}
+
+.support-conversation {
+    margin-top: 24px;
+}
+
+.support-ticket-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 16px 0;
+    align-items: center;
+}
+
+.support-messages {
+    display: grid;
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.support-message {
+    padding: 15px;
+    border: 1px solid var(--border, rgba(255,255,255,.1));
+    border-radius: 10px;
+    overflow-wrap: anywhere;
+}
+
+.support-message p {
+    white-space: pre-wrap;
+    margin-bottom: 0;
+}
+
+.error-text {
+    color: #ff7777;
+}
+
+@media (max-width: 800px) {
+    .support-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .support-list-heading {
+        align-items: flex-start;
+    }
+
+    .support-ticket-item {
+        align-items: flex-start;
+    }
+}
+

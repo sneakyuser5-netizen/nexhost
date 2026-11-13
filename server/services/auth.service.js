@@ -138,11 +138,109 @@ function cleanupExpiredSessions() {
     `).run();
 }
 
+
+function createPasswordResetToken(userId) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashToken(token);
+    const id = crypto.randomUUID();
+
+    const expiresAt = new Date(
+        Date.now() + 30 * 60 * 1000
+    ).toISOString();
+
+    db.prepare(`
+        DELETE FROM password_reset_tokens
+        WHERE user_id = ?
+        AND used_at IS NULL
+    `).run(userId);
+
+    db.prepare(`
+        INSERT INTO password_reset_tokens
+        (id, user_id, token_hash, expires_at)
+        VALUES (?, ?, ?, ?)
+    `).run(id, userId, tokenHash, expiresAt);
+
+    return { token, expiresAt };
+}
+
+function findPasswordResetToken(token) {
+    return db.prepare(`
+        SELECT
+            id,
+            user_id,
+            token_hash,
+            expires_at
+        FROM password_reset_tokens
+        WHERE token_hash = ?
+        AND used_at IS NULL
+        AND datetime(expires_at) > datetime('now')
+    `).get(hashToken(token));
+}
+
+function completePasswordReset(resetTokenId, userId, passwordHash) {
+    db.exec("BEGIN IMMEDIATE");
+
+    try {
+        const result = db.prepare(`
+            UPDATE password_reset_tokens
+            SET used_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            AND user_id = ?
+            AND used_at IS NULL
+            AND datetime(expires_at) > datetime('now')
+        `).run(resetTokenId, userId);
+
+        if (result.changes !== 1) {
+            throw new Error("Reset token is invalid or expired.");
+        }
+
+        db.prepare(`
+            UPDATE users
+            SET password_hash = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(passwordHash, userId);
+
+        db.prepare(`
+            UPDATE sessions
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            AND revoked_at IS NULL
+        `).run(userId);
+
+        db.prepare(`
+            UPDATE password_reset_tokens
+            SET used_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            AND used_at IS NULL
+        `).run(userId);
+
+        db.exec("COMMIT");
+        return true;
+    } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+    }
+}
+
+function revokeAllUserSessions(userId) {
+    return db.prepare(`
+        UPDATE sessions
+        SET revoked_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+        AND revoked_at IS NULL
+    `).run(userId);
+}
+
 module.exports = {
     hashPassword,
     verifyPassword,
     createSession,
     findSession,
     revokeSession,
-    cleanupExpiredSessions
+    cleanupExpiredSessions,
+    createPasswordResetToken,
+    findPasswordResetToken,
+    completePasswordReset,
+    revokeAllUserSessions
 };

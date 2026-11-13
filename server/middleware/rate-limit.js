@@ -33,8 +33,20 @@ const uploadLimiter = rateLimit({
     }
 });
 
+const passwordResetLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 3,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "Too many password reset attempts. Please try again later."
+    }
+});
+
 module.exports = {
     apiLimiter,
     authLimiter,
-    uploadLimiter
+    uploadLimiter,
+    passwordResetLimiter
 };

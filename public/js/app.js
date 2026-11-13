@@ -116,6 +116,18 @@ function renderAccount() {
         formatDate(currentUser.updated_at);
 }
 
+function showAuthPanel(panel) {
+    const login = panel === "login";
+    const forgot = panel === "forgot";
+    const reset = panel === "reset";
+
+    document.querySelector(".auth-tabs").classList.toggle("hidden", !login);
+    $("#auth-form").classList.toggle("hidden", !login);
+    $("#forgot-password-link").classList.toggle("hidden", !login || authMode !== "login");
+    $("#forgot-password-form").classList.toggle("hidden", !forgot);
+    $("#reset-password-form").classList.toggle("hidden", !reset);
+}
+
 function setAuthMode(mode) {
     authMode = mode;
 
@@ -128,6 +140,8 @@ function setAuthMode(mode) {
         ? "current-password"
         : "new-password";
     $("#auth-error").textContent = "";
+
+    showAuthPanel("login");
 }
 
 async function submitAuth(event) {
@@ -156,6 +170,120 @@ async function submitAuth(event) {
         $("#auth-error").textContent = error.message;
     } finally {
         $("#auth-submit").disabled = false;
+    }
+}
+
+async function submitForgotPassword(event) {
+    event.preventDefault();
+
+    const email = $("#forgot-email").value.trim();
+    const button = $("#forgot-submit");
+    const message = $("#forgot-error");
+
+    button.disabled = true;
+    message.textContent = "";
+
+    try {
+        const result = await api("/auth/forgot-password", {
+            method: "POST",
+            body: JSON.stringify({ email })
+        });
+
+        message.textContent = result.message ||
+            "If an account exists, a password reset link will be sent.";
+    } catch (error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function submitResetPassword(event) {
+    event.preventDefault();
+
+    const password = $("#reset-password").value;
+    const confirmation = $("#reset-password-confirm").value;
+    const message = $("#reset-error");
+    const button = $("#reset-submit");
+    const resetToken = new URLSearchParams(window.location.search).get("token");
+
+    message.textContent = "";
+
+    if (!resetToken) {
+        message.textContent = "This reset link is missing its token. Request a new link.";
+        return;
+    }
+
+    if (password !== confirmation) {
+        message.textContent = "The passwords do not match.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const result = await api("/auth/reset-password", {
+            method: "POST",
+            body: JSON.stringify({ token: resetToken, newPassword: password })
+        });
+
+        $("#reset-password-form").reset();
+        history.replaceState({}, document.title, window.location.pathname);
+        setAuthMode("login");
+        showAuthPanel("login");
+        $("#auth-error").textContent = result.message || "Password reset successful. You can now log in.";
+    } catch (error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function submitChangePassword(event) {
+    event.preventDefault();
+
+    const currentPassword = $("#current-password").value;
+    const newPassword = $("#new-password").value;
+    const confirmation = $("#confirm-new-password").value;
+    const message = $("#change-password-message");
+    const button = $("#change-password-submit");
+
+    message.textContent = "";
+
+    if (newPassword !== confirmation) {
+        message.textContent = "The new passwords do not match.";
+        return;
+    }
+
+    if (newPassword === currentPassword) {
+        message.textContent = "Choose a password different from your current password.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const result = await api("/auth/change-password", {
+            method: "POST",
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        if (result.token) {
+            token = result.token;
+            localStorage.setItem(TOKEN_KEY, token);
+        }
+
+        $("#change-password-form").reset();
+
+        const account = await api("/auth/me");
+        currentUser = account.user;
+        renderAccount();
+
+        message.textContent = "Password changed successfully. Other sessions have been signed out.";
+    } catch (error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
     }
 }
 
@@ -284,16 +412,205 @@ function switchView(view) {
         bots: "My Bots",
         deployments: "Deployments",
         account: "Account",
-        settings: "Settings"
+        settings: "Settings",
+        help: "Help & Support"
     };
 
     $("#page-title").textContent = titles[view] || "Overview";
 
     if (view === "deployments") loadAllDeployments();
+    if (view === "help") loadSupportTickets();
 
     if (view === "settings") {
         renderSettings();
         showSettingsFeedback("");
+    }
+}
+
+
+/* NEXHOST SUPPORT TICKETS */
+
+let activeSupportTicketId = null;
+
+function supportStatusBadge(status) {
+    const labels = {
+        open: "Open",
+        in_progress: "In Progress",
+        resolved: "Resolved",
+        closed: "Closed"
+    };
+
+    return `<span class="support-status ${escapeHTML(status)}">${escapeHTML(labels[status] || status)}</span>`;
+}
+
+async function loadSupportTickets() {
+    const container = $("#support-ticket-list");
+    if (!container) return;
+
+    container.innerHTML = '<p class="muted">Loading tickets...</p>';
+
+    try {
+        const result = await api("/support");
+        const tickets = result.tickets || [];
+
+        if (!tickets.length) {
+            container.innerHTML = '<p class="muted">You have not submitted any tickets yet.</p>';
+            return;
+        }
+
+        container.innerHTML = tickets.map(ticket => `
+            <button type="button" class="support-ticket-item"
+                data-action="support-open"
+                data-id="${escapeHTML(ticket.id)}">
+                <span>
+                    <strong>${escapeHTML(ticket.subject)}</strong>
+                    <small>${escapeHTML(ticket.category)} · ${escapeHTML(ticket.priority)}</small>
+                </span>
+                ${supportStatusBadge(ticket.status)}
+            </button>
+        `).join("");
+    } catch (error) {
+        container.innerHTML = `<p class="error-text">${escapeHTML(error.message)}</p>`;
+    }
+}
+
+async function openSupportTicket(id) {
+    activeSupportTicketId = id;
+
+    const conversation = $("#support-conversation");
+    conversation.classList.remove("hidden");
+    $("#support-messages").innerHTML = '<p class="muted">Loading conversation...</p>';
+
+    try {
+        const result = await api(`/support/${encodeURIComponent(id)}`);
+        const ticket = result.ticket;
+        if (!ticket) throw new Error("Ticket information was not returned.");
+
+        $("#support-conversation-title").textContent = ticket.subject;
+        $("#support-ticket-details").innerHTML = `
+            <div class="support-ticket-meta">
+                ${supportStatusBadge(ticket.status)}
+                <span>${escapeHTML(ticket.category)}</span>
+                <span>Priority: ${escapeHTML(ticket.priority)}</span>
+            </div>
+        `;
+
+        const messages = ticket.messages || result.messages || [];
+
+        $("#support-messages").innerHTML = messages.length
+            ? messages.map(message => `
+                <article class="support-message">
+                    <div class="support-message-heading">
+                        <strong>${escapeHTML(message.sender_email || message.sender_role || "User")}</strong>
+                        <small>${escapeHTML(message.created_at || "")}</small>
+                    </div>
+                    <p>${escapeHTML(message.message)}</p>
+                </article>
+            `).join("")
+            : '<p class="muted">No messages yet.</p>';
+
+        const isAdmin = currentUser && currentUser.role === "admin";
+        $("#support-admin-controls").classList.toggle("hidden", !isAdmin);
+        $("#support-status-select").value = ticket.status;
+
+        const replyForm = $("#support-reply-form");
+        const replyButton = replyForm.querySelector("button[type='submit']");
+        replyButton.disabled = ticket.status === "closed";
+        $("#support-reply").disabled = ticket.status === "closed";
+
+        conversation.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+        $("#support-messages").innerHTML =
+            `<p class="error-text">${escapeHTML(error.message)}</p>`;
+    }
+}
+
+function closeSupportConversation() {
+    activeSupportTicketId = null;
+    $("#support-conversation").classList.add("hidden");
+    $("#support-reply-form").reset();
+}
+
+async function submitSupportTicket(event) {
+    event.preventDefault();
+
+    const feedback = $("#support-form-feedback");
+    const button = event.currentTarget.querySelector("button[type='submit']");
+    button.disabled = true;
+    feedback.textContent = "Submitting ticket...";
+
+    try {
+        const result = await api("/support", {
+            method: "POST",
+            body: JSON.stringify({
+                subject: $("#support-subject").value.trim(),
+                category: $("#support-category").value,
+                priority: $("#support-priority").value,
+                message: $("#support-message").value.trim()
+            })
+        });
+
+        event.currentTarget.reset();
+        feedback.textContent = result.message || "Support ticket submitted successfully.";
+        await loadSupportTickets();
+
+        if (result.ticket && result.ticket.id) {
+            await openSupportTicket(result.ticket.id);
+        } else if (result.ticketId || result.id) {
+            await openSupportTicket(result.ticketId || result.id);
+        }
+
+        notify("Support ticket submitted.");
+    } catch (error) {
+        feedback.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function submitSupportReply(event) {
+    event.preventDefault();
+    if (!activeSupportTicketId) return;
+
+    const button = event.currentTarget.querySelector("button[type='submit']");
+    const message = $("#support-reply").value.trim();
+    if (!message) return;
+
+    button.disabled = true;
+
+    try {
+        await api(`/support/${encodeURIComponent(activeSupportTicketId)}/replies`, {
+            method: "POST",
+            body: JSON.stringify({ message })
+        });
+
+        $("#support-reply").value = "";
+        await openSupportTicket(activeSupportTicketId);
+        await loadSupportTickets();
+        notify("Reply sent successfully.");
+    } catch (error) {
+        notify(error.message);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function updateSupportTicketStatus() {
+    if (!activeSupportTicketId) return;
+
+    try {
+        await api(`/support/${encodeURIComponent(activeSupportTicketId)}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({
+                status: $("#support-status-select").value
+            })
+        });
+
+        await openSupportTicket(activeSupportTicketId);
+        await loadSupportTickets();
+        notify("Ticket status updated.");
+    } catch (error) {
+        notify(error.message);
     }
 }
 
@@ -847,6 +1164,12 @@ document.addEventListener("click", event => {
             openDetails(id, "deployments");
         } else if (action.dataset.action === "upload") {
             document.querySelector(`[data-upload-id="${CSS.escape(id)}"]`).click();
+        } else if (action.dataset.action === "support-open") {
+            openSupportTicket(id);
+        } else if (action.dataset.action === "support-back") {
+            closeSupportConversation();
+        } else if (action.dataset.action === "support-status") {
+            updateSupportTicketStatus();
         }
     }
 });
@@ -859,7 +1182,27 @@ document.addEventListener("change", event => {
 });
 
 $("#auth-form").addEventListener("submit", submitAuth);
+$("#forgot-password-form").addEventListener("submit", submitForgotPassword);
+$("#reset-password-form").addEventListener("submit", submitResetPassword);
+$("#change-password-form").addEventListener("submit", submitChangePassword);
+
+$("#forgot-password-link").addEventListener("click", () => {
+    $("#forgot-email").value = $("#auth-email").value.trim();
+    $("#forgot-error").textContent = "";
+    showAuthPanel("forgot");
+});
+
+document.querySelectorAll("[data-auth-back]").forEach(button => {
+    button.addEventListener("click", () => {
+        setAuthMode("login");
+    });
+});
+
 $("#create-bot-form").addEventListener("submit", createBot);
+$("#support-ticket-form").addEventListener("submit", submitSupportTicket);
+$("#support-reply-form").addEventListener("submit", submitSupportReply);
+$("#refresh-support-tickets").addEventListener("click", loadSupportTickets);
+
 $("#new-bot-btn").addEventListener("click", () => {
     $("#bot-modal").classList.remove("hidden");
 });
@@ -892,7 +1235,13 @@ $("#reset-settings").addEventListener("click", resetSettings);
 
 
 loadSavedSettings();
-checkSession();
+
+if (new URLSearchParams(window.location.search).has("token")) {
+    showAuth();
+    showAuthPanel("reset");
+} else {
+    checkSession();
+}
 
 setInterval(() => {
     if (token && !$("#dashboard").classList.contains("hidden")) {
