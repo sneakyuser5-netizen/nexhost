@@ -5,6 +5,7 @@ let token = localStorage.getItem(TOKEN_KEY);
 let currentUser = null;
 let bots = [];
 let authMode = "login";
+let pendingVerificationEmail = "";
 let activeBotId = null;
 let detailMode = "logs";
 let logAutoRefresh = true;
@@ -76,6 +77,11 @@ async function showDashboard() {
         }
 
         $("#user-email").textContent = currentUser.email;
+        const ownerNav = $("#owner-dashboard-nav");
+        if (ownerNav) {
+            ownerNav.classList.toggle("hidden", currentUser.role !== "admin");
+        }
+
         $("#page-title").textContent = "Overview";
 
         renderAccount();
@@ -120,12 +126,14 @@ function showAuthPanel(panel) {
     const login = panel === "login";
     const forgot = panel === "forgot";
     const reset = panel === "reset";
+    const verify = panel === "verify";
 
     document.querySelector(".auth-tabs").classList.toggle("hidden", !login);
     $("#auth-form").classList.toggle("hidden", !login);
     $("#forgot-password-link").classList.toggle("hidden", !login || authMode !== "login");
     $("#forgot-password-form").classList.toggle("hidden", !forgot);
     $("#reset-password-form").classList.toggle("hidden", !reset);
+    $("#verify-email-form").classList.toggle("hidden", !verify);
 }
 
 function setAuthMode(mode) {
@@ -159,17 +167,127 @@ async function submitAuth(event) {
             body: JSON.stringify({ email, password })
         });
 
+        if (authMode === "register") {
+            pendingVerificationEmail = result.email || email;
+
+            $("#verify-email-description").textContent =
+                "A confirmation code has been sent to " +
+                pendingVerificationEmail + ". Enter it below.";
+
+            $("#verification-code").value = "";
+            $("#verify-email-error").textContent = "";
+            $("#resend-verification-feedback").textContent = "";
+
+            $("#auth-form").reset();
+            showAuthPanel("verify");
+            notify("Confirmation code sent to your email.");
+            return;
+        }
+
         token = result.token;
         currentUser = result.user;
         localStorage.setItem(TOKEN_KEY, token);
 
         $("#auth-form").reset();
         showDashboard();
-        notify(authMode === "login" ? "Welcome back!" : "Account created!");
+        notify("Welcome back!");
     } catch (error) {
         $("#auth-error").textContent = error.message;
+
+        if (
+            error.message.includes("awaiting verification") ||
+            error.message.includes("verify your email address")
+        ) {
+            pendingVerificationEmail = email;
+
+            $("#verify-email-description").textContent =
+                "Verify " + email + " using the confirmation code sent to your email. You can request another code below.";
+
+            $("#verification-code").value = "";
+            $("#verify-email-error").textContent = "";
+            $("#resend-verification-feedback").textContent = "";
+
+            showAuthPanel("verify");
+        }
     } finally {
         $("#auth-submit").disabled = false;
+    }
+}
+
+async function submitVerifyEmail(event) {
+    event.preventDefault();
+
+    const code = $("#verification-code").value.trim();
+    const button = $("#verify-email-submit");
+    const message = $("#verify-email-error");
+
+    message.textContent = "";
+
+    if (!pendingVerificationEmail) {
+        message.textContent = "Please return to registration and enter your email again.";
+        return;
+    }
+
+    if (!/^\d{8}$/.test(code)) {
+        message.textContent = "Enter the complete 8-digit confirmation code.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const result = await api("/auth/verify-email", {
+            method: "POST",
+            body: JSON.stringify({
+                email: pendingVerificationEmail,
+                code
+            })
+        });
+
+        $("#verify-email-form").reset();
+
+        const verifiedEmail = pendingVerificationEmail;
+        pendingVerificationEmail = "";
+
+        setAuthMode("login");
+        $("#auth-email").value = verifiedEmail;
+        $("#auth-error").textContent =
+            result.message || "Email verified. You can now log in.";
+
+        notify("Email verified successfully.");
+    } catch (error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function resendVerificationCode() {
+    const button = $("#resend-verification-code");
+    const feedback = $("#resend-verification-feedback");
+
+    feedback.textContent = "";
+
+    if (!pendingVerificationEmail) {
+        feedback.textContent = "Please return to registration and enter your email again.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const result = await api("/auth/resend-verification", {
+            method: "POST",
+            body: JSON.stringify({
+                email: pendingVerificationEmail
+            })
+        });
+
+        feedback.textContent = result.message;
+    } catch (error) {
+        feedback.textContent = error.message;
+    } finally {
+        button.disabled = false;
     }
 }
 
@@ -413,13 +531,15 @@ function switchView(view) {
         deployments: "Deployments",
         account: "Account",
         settings: "Settings",
-        help: "Help & Support"
+        help: "Help & Support",
+        owner: "Owner Dashboard"
     };
 
     $("#page-title").textContent = titles[view] || "Overview";
 
     if (view === "deployments") loadAllDeployments();
     if (view === "help") loadSupportTickets();
+    if (view === "owner") loadOwnerDashboard();
 
     if (view === "settings") {
         renderSettings();
@@ -960,6 +1080,97 @@ async function loadBotLogs() {
     }
 }
 
+
+
+async function deleteBotEnvironmentVariable(name) {
+    if (!confirm(`Delete environment variable ${name}?`)) return;
+
+    try {
+        await api(
+            `/bots/${encodeURIComponent(activeBotId)}/config/environment/${encodeURIComponent(name)}`,
+            { method: "DELETE" }
+        );
+
+        notify("Environment variable deleted.");
+        await loadDetails();
+    } catch (error) {
+        notify(error.message);
+    }
+}
+
+async function loadBotConfig() {
+    const target = $("#details-content");
+    const botId = activeBotId;
+
+    const result = await api(
+        `/bots/${encodeURIComponent(botId)}/config`
+    );
+
+    if (activeBotId !== botId || detailMode !== "config") return;
+
+    const config = result.config || result;
+    const args = Array.isArray(config.startupArgs)
+        ? config.startupArgs
+        : [];
+
+    const names = config.environmentVariableNames || [];
+
+    target.innerHTML = `
+        <section class="settings-section">
+            <h3>Startup Arguments</h3>
+            <p class="muted">
+                One argument per line. These are passed to your bot,
+                not to the Node.js runtime.
+            </p>
+            <form id="startup-config-form">
+                <textarea id="startup-args" rows="5"
+                    maxlength="9000"
+                    placeholder="--mode&#10;production">${escapeHTML(args.join("\n"))}</textarea>
+                <button class="primary-btn" type="submit">
+                    Save Startup Arguments
+                </button>
+            </form>
+        </section>
+
+        <section class="settings-section">
+            <h3>Environment Variables</h3>
+            <p class="muted">
+                Values are encrypted when stored and are never displayed again.
+            </p>
+            <form id="environment-config-form">
+                <label for="environment-name">Variable Name</label>
+                <input id="environment-name" required
+                    maxlength="128" pattern="[A-Za-z_][A-Za-z0-9_]*"
+                    placeholder="API_KEY" autocomplete="off">
+
+                <label for="environment-value">Variable Value</label>
+                <input id="environment-value" type="password"
+                    required maxlength="8192"
+                    autocomplete="new-password"
+                    placeholder="Enter variable value">
+
+                <button class="primary-btn" type="submit">
+                    Save Variable
+                </button>
+            </form>
+
+            <h3>Saved Variables</h3>
+            <div class="environment-list">
+                ${names.length ? names.map(name => `
+                    <div class="deployment-row">
+                        <strong>${escapeHTML(name)}</strong>
+                        <button class="small-btn danger"
+                            data-action="env-delete"
+                            data-name="${escapeHTML(name)}">
+                            Delete
+                        </button>
+                    </div>
+                `).join("") : `<p class="muted">No variables configured.</p>`}
+            </div>
+        </section>
+    `;
+}
+
 async function loadDetails() {
     const target = $("#details-content");
     target.innerHTML = `<p class="muted">Loading...</p>`;
@@ -985,7 +1196,7 @@ async function loadDetails() {
             `;
 
             await loadBotLogs();
-        } else {
+        } else if (detailMode === "deployments") {
             const result = await api(
                 `/bots/${encodeURIComponent(activeBotId)}/deployments`
             );
@@ -1006,6 +1217,8 @@ async function loadDetails() {
                     </div>
                 `).join("")
                 : `<p class="muted">No deployments found.</p>`;
+        } else if (detailMode === "config") {
+            await loadBotConfig();
         }
     } catch (error) {
         target.textContent = error.message;
@@ -1152,7 +1365,9 @@ document.addEventListener("click", event => {
     if (action) {
         const { id } = action.dataset;
 
-        if (["start", "stop", "restart"].includes(action.dataset.action)) {
+        if (action.dataset.action === "env-delete") {
+            deleteBotEnvironmentVariable(action.dataset.name);
+        } else if (["start", "stop", "restart"].includes(action.dataset.action)) {
             processAction(id, action.dataset.action);
         } else if (action.dataset.action === "rollback") {
             rollbackBot(id, action.dataset.deploymentId);
@@ -1174,6 +1389,50 @@ document.addEventListener("click", event => {
     }
 });
 
+
+document.addEventListener("submit", async event => {
+    if (event.target.id === "startup-config-form") {
+        event.preventDefault();
+
+        const startupArgs = $("#startup-args").value
+            .split(/\r?\n/)
+            .filter(arg => arg.length > 0);
+
+        try {
+            await api(`/bots/${encodeURIComponent(activeBotId)}/config/startup`, {
+                method: "PUT",
+                body: JSON.stringify({ startupArgs })
+            });
+
+            notify("Startup arguments saved.");
+            await loadDetails();
+        } catch (error) {
+            notify(error.message);
+        }
+    }
+
+    if (event.target.id === "environment-config-form") {
+        event.preventDefault();
+
+        const name = $("#environment-name").value.trim();
+        const value = $("#environment-value").value;
+
+        try {
+            await api(`/bots/${encodeURIComponent(activeBotId)}/config/environment`, {
+                method: "PUT",
+                body: JSON.stringify({
+                    variables: { [name]: value }
+                })
+            });
+
+            notify("Environment variable saved.");
+            await loadDetails();
+        } catch (error) {
+            notify(error.message);
+        }
+    }
+});
+
 document.addEventListener("change", event => {
     if (event.target.matches("[data-upload-id]")) {
         uploadBot(event.target.dataset.uploadId, event.target.files[0]);
@@ -1182,6 +1441,8 @@ document.addEventListener("change", event => {
 });
 
 $("#auth-form").addEventListener("submit", submitAuth);
+$("#verify-email-form").addEventListener("submit", submitVerifyEmail);
+$("#resend-verification-code").addEventListener("click", resendVerificationCode);
 $("#forgot-password-form").addEventListener("submit", submitForgotPassword);
 $("#reset-password-form").addEventListener("submit", submitResetPassword);
 $("#change-password-form").addEventListener("submit", submitChangePassword);
@@ -1265,6 +1526,103 @@ setInterval(() => {
     }
 }, 3000);
 
+
+
+/* NEXHOST PRIVATE OWNER DASHBOARD */
+
+async function loadOwnerDashboard() {
+    if (!currentUser || currentUser.role !== "admin") {
+        switchView("overview");
+        return;
+    }
+
+    const customerList = $("#owner-customers-list");
+    const ticketList = $("#owner-tickets-list");
+
+    customerList.innerHTML = '<tr><td colspan="3">Loading customers...</td></tr>';
+    ticketList.innerHTML = '<tr><td colspan="6">Loading tickets...</td></tr>';
+
+    try {
+        const result = await api("/support/owner/dashboard");
+        const stats = result.statistics || {};
+
+        $("#owner-total").textContent = stats.total_tickets || 0;
+        $("#owner-open").textContent = stats.open_tickets || 0;
+        $("#owner-progress").textContent = stats.in_progress_tickets || 0;
+        $("#owner-resolved").textContent = stats.resolved_tickets || 0;
+        $("#owner-closed").textContent = stats.closed_tickets || 0;
+        $("#owner-customers").textContent = stats.total_customers || 0;
+
+        const dateText = value => {
+            if (!value) return "Unavailable";
+            const date = new Date(value.replace(" ", "T") + "Z");
+            return Number.isNaN(date.getTime())
+                ? escapeHTML(value)
+                : escapeHTML(date.toLocaleDateString());
+        };
+
+        if (!result.customers || !result.customers.length) {
+            customerList.innerHTML =
+                '<tr><td colspan="3">No customers registered yet.</td></tr>';
+        } else {
+            customerList.innerHTML = result.customers.map(customer => `
+                <tr>
+                    <td>${escapeHTML(customer.email)}</td>
+                    <td>${dateText(customer.created_at)}</td>
+                    <td>${Number(customer.ticket_count) || 0}</td>
+                </tr>
+            `).join("");
+        }
+
+        if (!result.recentTickets || !result.recentTickets.length) {
+            ticketList.innerHTML =
+                '<tr><td colspan="6">No support tickets yet.</td></tr>';
+        } else {
+            ticketList.innerHTML = result.recentTickets.map(ticket => `
+                <tr>
+                    <td>${escapeHTML(ticket.user_email)}</td>
+                    <td>${escapeHTML(ticket.subject)}</td>
+                    <td>${escapeHTML(ticket.priority)}</td>
+                    <td>${supportStatusBadge(ticket.status)}</td>
+                    <td>${Number(ticket.message_count) || 0}</td>
+                    <td>
+                        <button class="secondary-btn owner-open-btn"
+                            data-owner-ticket="${escapeHTML(ticket.id)}">
+                            Open
+                        </button>
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+    } catch (error) {
+        console.error("[OWNER DASHBOARD]", error);
+
+        customerList.innerHTML =
+            '<tr><td colspan="3">Unable to load customers.</td></tr>';
+
+        ticketList.innerHTML =
+            '<tr><td colspan="6">Unable to load tickets. Refresh to retry.</td></tr>';
+    }
+}
+
+document.addEventListener("click", event => {
+    const refresh = event.target.closest("[data-owner-refresh]");
+
+    if (refresh) {
+        loadOwnerDashboard();
+        return;
+    }
+
+    const ticketButton = event.target.closest("[data-owner-ticket]");
+
+    if (ticketButton) {
+        const ticketId = ticketButton.dataset.ownerTicket;
+
+        switchView("help");
+        openSupportTicket(ticketId);
+    }
+});
 
 /* MOBILE NAVIGATION CONTROLLER */
 (() => {

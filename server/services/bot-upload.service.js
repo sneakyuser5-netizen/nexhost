@@ -6,6 +6,7 @@ const { pipeline } = require("node:stream/promises");
 
 const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
 const SNAPSHOTS_DIR = path.resolve(__dirname, "../../storage/snapshots");
+const { installDependencies } = require("./dependency-installer.service");
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -312,6 +313,8 @@ async function uploadBotArchive(bot, buffer, deployment) {
             throw new Error("Invalid bot ID for snapshot storage.");
         }
 
+        const dependencyResult = await installDependencies(staging);
+
         const snapshotDirectory = path.join(SNAPSHOTS_DIR, bot.id);
 
         await fs.promises.mkdir(snapshotDirectory, {
@@ -357,7 +360,8 @@ async function uploadBotArchive(bot, buffer, deployment) {
             extractedBytes: result.totalSize,
             directory: target,
             snapshotId: deployment.id,
-            archiveHash
+            archiveHash,
+            dependencies: dependencyResult
         };
 
     } catch (error) {
@@ -426,6 +430,8 @@ async function restoreBotArchive(bot, buffer) {
             );
         }
 
+        const dependencyResult = await installDependencies(staging);
+
         if (fs.existsSync(target)) {
             await fs.promises.rename(target, backup);
             backupCreated = true;
@@ -453,7 +459,8 @@ async function restoreBotArchive(bot, buffer) {
         return {
             files: result.fileCount,
             extractedBytes: result.totalSize,
-            directory: target
+            directory: target,
+            dependencies: dependencyResult
         };
 
     } catch (error) {

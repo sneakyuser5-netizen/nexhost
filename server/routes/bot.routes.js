@@ -19,6 +19,11 @@ router.post("/:id/rollback/:deploymentId", botController.rollbackDeployment);
 
 router.get("/", botController.listBots);
 router.get("/:id", botController.getBot);
+router.get("/:id/config", botController.getBotConfig);
+router.put("/:id/config/startup", botController.updateBotStartupConfig);
+router.put("/:id/config/environment", botController.updateBotEnvironment);
+router.delete("/:id/config/environment/:name", botController.deleteBotEnvironment);
+
 router.get("/:id/status", processController.status);
 router.get("/:id/resources", processController.resources);
 router.get("/:id/deployments", botController.listDeployments);

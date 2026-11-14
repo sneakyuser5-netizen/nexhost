@@ -155,6 +155,104 @@ if (!supportMigration) {
     }
 }
 
+
+// EMAIL_VERIFICATION_MIGRATION
+const emailVerificationMigration = db.prepare(
+    "SELECT version FROM schema_migrations WHERE version = 6"
+).get();
+
+if (!emailVerificationMigration) {
+    db.exec("BEGIN IMMEDIATE");
+
+    try {
+        const userColumns = db.prepare(
+            "PRAGMA table_info(users)"
+        ).all();
+
+        if (!userColumns.some(column => column.name === "email_verified")) {
+            db.exec(`
+                ALTER TABLE users
+                ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1
+                CHECK(email_verified IN (0, 1))
+            `);
+        }
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS email_verification_codes (
+                user_id TEXT PRIMARY KEY,
+                code_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_email_verification_expiry
+            ON email_verification_codes(expires_at);
+        `);
+
+        db.prepare(
+            "INSERT OR IGNORE INTO schema_migrations(version) VALUES (6)"
+        ).run();
+
+        db.exec("COMMIT");
+        console.log("[DATABASE] Migration 6 applied: email verification.");
+    } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+    }
+}
+
+
+// BOT_CONFIGURATION_MIGRATION
+const botConfigMigration = db.prepare(
+    "SELECT version FROM schema_migrations WHERE version = 7"
+).get();
+
+if (!botConfigMigration) {
+    db.exec("BEGIN IMMEDIATE");
+
+    try {
+        const botColumns = db.prepare(
+            "PRAGMA table_info(bots)"
+        ).all();
+
+        if (!botColumns.some(column => column.name === "startup_args")) {
+            db.exec(
+                "ALTER TABLE bots ADD COLUMN startup_args TEXT NOT NULL DEFAULT '[]'"
+            );
+        }
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS bot_environment_variables (
+                bot_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                iv TEXT NOT NULL,
+                auth_tag TEXT NOT NULL,
+                ciphertext TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (bot_id, name),
+                FOREIGN KEY(bot_id) REFERENCES bots(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_bot_environment_variables_bot
+            ON bot_environment_variables(bot_id);
+        `);
+
+        db.prepare(
+            "INSERT OR IGNORE INTO schema_migrations(version) VALUES (7)"
+        ).run();
+
+        db.exec("COMMIT");
+        console.log("[DATABASE] Migration 7 applied: bot configuration.");
+    } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+    }
+}
+
 console.log("[DATABASE] SQLite initialized successfully.");
 
 function closeDatabase() {

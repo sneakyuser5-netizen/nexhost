@@ -8,6 +8,7 @@ router.use(authenticate);
 
 router.post("/", support.createTicket);
 router.get("/", support.listTickets);
+router.get("/owner/dashboard", support.getOwnerDashboard);
 router.get("/:id", support.getTicket);
 router.post("/:id/replies", support.replyTicket);
 router.patch("/:id/status", support.updateTicketStatus);

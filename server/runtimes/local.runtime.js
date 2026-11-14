@@ -2,6 +2,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { db } = require("../../database/db");
+const botConfigService = require("../services/bot-config.service");
 
 const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
 const LOGS_DIR = path.resolve(__dirname, "../../storage/logs");
@@ -199,12 +200,15 @@ async function startBot(botId, ownerId) {
 
     let child;
 
+    const runtimeConfig = botConfigService.getRuntimeConfig(botId);
+
     try {
         child = spawn(
             process.execPath,
             [
                 `--max-old-space-size=${BOT_MAX_OLD_SPACE_MB}`,
-                realEntryFile
+                realEntryFile,
+                ...runtimeConfig.startupArgs
             ],
             {
                 cwd: botDir,
@@ -215,7 +219,8 @@ async function startBot(botId, ownerId) {
                     PATH: process.env.PATH || "",
                     HOME: botHome,
                     TMPDIR: botTmp,
-                    NODE_ENV: "production"
+                    NODE_ENV: "production",
+                    ...runtimeConfig.environment
                 }
             }
         );

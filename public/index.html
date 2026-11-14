@@ -44,6 +44,46 @@
                 Forgot your password?
             </button>
 
+            <form id="verify-email-form" class="hidden">
+                <h3>Verify your email</h3>
+                <p id="verify-email-description" class="muted">
+                    Enter the 8-digit confirmation code sent to your email address.
+                </p>
+
+                <label>Confirmation Code</label>
+                <input
+                    id="verification-code"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]{8}"
+                    maxlength="8"
+                    minlength="8"
+                    placeholder="12345678"
+                    autocomplete="one-time-code"
+                    required
+                >
+
+                <button id="verify-email-submit" class="primary-btn full-btn" type="submit">
+                    Verify Email
+                </button>
+
+                <p id="verify-email-error" class="error-text"></p>
+
+                <button
+                    type="button"
+                    id="resend-verification-code"
+                    class="text-link"
+                >
+                    Resend Confirmation Code
+                </button>
+
+                <p id="resend-verification-feedback" class="muted"></p>
+
+                <button type="button" class="text-link" data-auth-back>
+                    Back to Login
+                </button>
+            </form>
+
             <form id="forgot-password-form" class="hidden">
                 <h3>Reset your password</h3>
                 <p class="muted">Enter your account email. If it exists, we will send a reset link.</p>
@@ -100,6 +140,10 @@
             </button>
             <button class="nav-item" data-view="settings">
                 <span>⚙</span> Settings
+            </button>
+
+            <button class="nav-item hidden" id="owner-dashboard-nav" data-view="owner">
+                <span>♛</span> Owner Dashboard
             </button>
 
             <div class="side-label">RESOURCES</div>
@@ -345,6 +389,104 @@
                 <p id="settings-feedback" class="settings-feedback"></p>
             </section>
 
+
+
+            <section id="view-owner" class="view hidden">
+                <div class="welcome-panel">
+                    <div>
+                        <span class="eyebrow">PRIVATE ADMINISTRATION</span>
+                        <h2>Owner Dashboard</h2>
+                        <p>Manage customer support and monitor platform requests.</p>
+                    </div>
+                    <div class="welcome-symbol">♛</div>
+                </div>
+
+                <div class="owner-heading">
+                    <div>
+                        <h3>Support Overview</h3>
+                        <p class="muted">Live statistics from your support system.</p>
+                    </div>
+                    <button class="secondary-btn" data-owner-refresh>↻ Refresh</button>
+                </div>
+
+                <div class="owner-stat-grid">
+                    <div class="panel owner-stat">
+                        <span>Total Tickets</span>
+                        <strong id="owner-total">0</strong>
+                    </div>
+                    <div class="panel owner-stat">
+                        <span>Open</span>
+                        <strong id="owner-open">0</strong>
+                    </div>
+                    <div class="panel owner-stat">
+                        <span>In Progress</span>
+                        <strong id="owner-progress">0</strong>
+                    </div>
+                    <div class="panel owner-stat">
+                        <span>Resolved</span>
+                        <strong id="owner-resolved">0</strong>
+                    </div>
+                    <div class="panel owner-stat">
+                        <span>Closed</span>
+                        <strong id="owner-closed">0</strong>
+                    </div>
+                    <div class="panel owner-stat">
+                        <span>Customers</span>
+                        <strong id="owner-customers">0</strong>
+                    </div>
+                </div>
+
+                <div class="panel owner-section">
+                    <div class="owner-heading">
+                        <div>
+                            <h3>Customer Directory</h3>
+                            <p class="muted">Registered customer accounts and their support activity.</p>
+                        </div>
+                    </div>
+
+                    <div class="owner-table-wrap">
+                        <table class="owner-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer Email</th>
+                                    <th>Registered</th>
+                                    <th>Tickets</th>
+                                </tr>
+                            </thead>
+                            <tbody id="owner-customers-list">
+                                <tr><td colspan="3">Loading customers...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="panel owner-section">
+                    <div class="owner-heading">
+                        <div>
+                            <h3>Recent Support Tickets</h3>
+                            <p class="muted">Review customer requests and respond to conversations.</p>
+                        </div>
+                    </div>
+
+                    <div class="owner-table-wrap">
+                        <table class="owner-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Subject</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th>Messages</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="owner-tickets-list">
+                                <tr><td colspan="6">Loading tickets...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
             <section id="view-help" class="view hidden">
                 <div class="welcome-panel">
@@ -601,6 +743,7 @@
             <div class="details-tabs">
                 <button class="detail-tab active" data-detail="logs">Console</button>
                 <button class="detail-tab" data-detail="deployments">Deployments</button>
+                <button class="detail-tab" data-detail="config">Configuration</button>
             </div>
             <div id="details-content" class="details-content"></div>
         </div>

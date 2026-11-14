@@ -1725,3 +1725,104 @@ html {
     }
 }
 
+
+
+/* PRIVATE OWNER DASHBOARD */
+
+.owner-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin: 24px 0 16px;
+}
+
+.owner-heading h3 {
+    margin-bottom: 5px;
+}
+
+.owner-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 15px;
+}
+
+.owner-stat {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.owner-stat span {
+    color: var(--muted, #999);
+    font-size: 13px;
+}
+
+.owner-stat strong {
+    font-size: 30px;
+    font-weight: 700;
+}
+
+.owner-section {
+    padding: 22px;
+    margin-top: 22px;
+}
+
+.owner-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.owner-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 650px;
+    text-align: left;
+}
+
+.owner-table th,
+.owner-table td {
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,.1));
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.owner-table th {
+    color: var(--muted, #999);
+    font-weight: 600;
+}
+
+.owner-table td {
+    overflow-wrap: anywhere;
+}
+
+.owner-open-btn {
+    padding: 8px 13px;
+    white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+    .owner-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .owner-heading {
+        align-items: flex-start;
+    }
+
+    .owner-section {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 420px) {
+    .owner-stat {
+        padding: 15px;
+    }
+
+    .owner-stat strong {
+        font-size: 24px;
+    }
+}

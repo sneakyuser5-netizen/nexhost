@@ -256,10 +256,81 @@ function updateTicketStatus(req, res) {
     }
 }
 
+
+function getOwnerDashboard(req, res) {
+    try {
+        if (req.user.role !== "admin") {
+            return res.status(403).json({
+                success: false,
+                message: "Administrator access required."
+            });
+        }
+
+        const statistics = db.prepare(`
+            SELECT
+                COUNT(*) AS total_tickets,
+                SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_tickets,
+                SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_tickets,
+                SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved_tickets,
+                SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets
+            FROM support_tickets
+        `).get();
+
+        const customerStats = db.prepare(`
+            SELECT
+                COUNT(*) AS total_customers
+            FROM users
+            WHERE role = 'user'
+        `).get();
+
+        const customers = db.prepare(`
+            SELECT
+                u.id,
+                u.email,
+                u.created_at,
+                COUNT(t.id) AS ticket_count
+            FROM users u
+            LEFT JOIN support_tickets t ON t.user_id = u.id
+            WHERE u.role = 'user'
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        `).all();
+
+        const recentTickets = db.prepare(`
+            SELECT
+                t.*,
+                u.email AS user_email,
+                (SELECT COUNT(*) FROM support_messages m
+                 WHERE m.ticket_id = t.id) AS message_count
+            FROM support_tickets t
+            JOIN users u ON u.id = t.user_id
+            ORDER BY t.updated_at DESC
+            LIMIT 20
+        `).all();
+
+        return res.json({
+            success: true,
+            statistics: {
+                ...statistics,
+                total_customers: customerStats.total_customers
+            },
+            customers,
+            recentTickets
+        });
+    } catch (error) {
+        console.error("[OWNER DASHBOARD]", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Unable to load Owner Dashboard."
+        });
+    }
+}
+
 module.exports = {
     createTicket,
     listTickets,
     getTicket,
     replyTicket,
-    updateTicketStatus
+    updateTicketStatus,
+    getOwnerDashboard
 };

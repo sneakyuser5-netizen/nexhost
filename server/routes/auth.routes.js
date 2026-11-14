@@ -6,11 +6,25 @@ const authenticate = require("../middleware/auth");
 
 const {
     authLimiter,
-    passwordResetLimiter
+    passwordResetLimiter,
+    emailVerificationLimiter,
+    verificationResendLimiter
 } = require("../middleware/rate-limit");
 
 router.post("/register", authLimiter, authController.register);
 router.post("/login", authLimiter, authController.login);
+
+router.post(
+    "/verify-email",
+    emailVerificationLimiter,
+    authController.verifyEmail
+);
+
+router.post(
+    "/resend-verification",
+    verificationResendLimiter,
+    authController.resendVerificationCode
+);
 
 router.get("/me", authenticate, authController.me);
 router.post("/logout", authenticate, authController.logout);

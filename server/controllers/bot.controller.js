@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { db } = require("../../database/db");
+const botConfigService = require("../services/bot-config.service");
 const deploymentService = require("../services/deployment.service");
 
 const botFields = `
@@ -268,6 +269,139 @@ function deleteBot(req, res) {
     }
 }
 
+
+function getBotConfig(req, res) {
+    try {
+        const bot = db.prepare(
+            "SELECT id FROM bots WHERE id = ? AND owner_id = ?"
+        ).get(req.params.id, req.user.id);
+
+        if (!bot) {
+            return res.status(404).json({
+                success: false,
+                message: "Bot not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            config: botConfigService.getConfig(bot.id)
+        });
+    } catch (error) {
+        console.error("[BOT CONFIG GET]", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Unable to retrieve bot configuration."
+        });
+    }
+}
+
+function updateBotStartupConfig(req, res) {
+    try {
+        const bot = db.prepare(
+            "SELECT id FROM bots WHERE id = ? AND owner_id = ?"
+        ).get(req.params.id, req.user.id);
+
+        if (!bot) {
+            return res.status(404).json({
+                success: false,
+                message: "Bot not found."
+            });
+        }
+
+        const config = botConfigService.updateStartupArgs(
+            bot.id,
+            req.body?.startupArgs
+        );
+
+        return res.json({
+            success: true,
+            message: "Startup configuration updated.",
+            config
+        });
+    } catch (error) {
+        const status = /Stop the bot|maximum of 32|must be an array|Bot not found/.test(error.message)
+            ? 400 : 500;
+
+        return res.status(status).json({
+            success: false,
+            message: error.message
+        });
+    }
+}
+
+function updateBotEnvironment(req, res) {
+    try {
+        const bot = db.prepare(
+            "SELECT id FROM bots WHERE id = ? AND owner_id = ?"
+        ).get(req.params.id, req.user.id);
+
+        if (!bot) {
+            return res.status(404).json({
+                success: false,
+                message: "Bot not found."
+            });
+        }
+
+        const config = botConfigService.setEnvironmentVariables(
+            bot.id,
+            req.body?.variables
+        );
+
+        return res.json({
+            success: true,
+            message: "Environment variables encrypted and saved.",
+            config
+        });
+    } catch (error) {
+        const status = /Bot not found/.test(error.message)
+            ? 404
+            : /Stop the bot|Invalid environment|maximum of 64|reserved|must be an object/.test(error.message)
+                ? 400 : 500;
+
+        return res.status(status).json({
+            success: false,
+            message: error.message
+        });
+    }
+}
+
+function deleteBotEnvironment(req, res) {
+    try {
+        const bot = db.prepare(
+            "SELECT id FROM bots WHERE id = ? AND owner_id = ?"
+        ).get(req.params.id, req.user.id);
+
+        if (!bot) {
+            return res.status(404).json({
+                success: false,
+                message: "Bot not found."
+            });
+        }
+
+        const config = botConfigService.deleteEnvironmentVariable(
+            bot.id,
+            req.params.name
+        );
+
+        return res.json({
+            success: true,
+            message: "Environment variable deleted.",
+            config
+        });
+    } catch (error) {
+        const status = /Bot not found/.test(error.message)
+            ? 404
+            : /Stop the bot|Invalid environment/.test(error.message)
+                ? 400 : 500;
+
+        return res.status(status).json({
+            success: false,
+            message: error.message
+        });
+    }
+}
+
 module.exports = {
     createBot,
     listBots,
@@ -276,7 +410,11 @@ module.exports = {
     deleteBot,
     uploadBotFiles,
     listDeployments,
-    rollbackDeployment
+    rollbackDeployment,
+    getBotConfig,
+    updateBotStartupConfig,
+    updateBotEnvironment,
+    deleteBotEnvironment
 };
 
 async function uploadBotFiles(req, res) {

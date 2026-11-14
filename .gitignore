@@ -26,3 +26,12 @@ storage/nexhost-server.pid
 # Before-help backups
 *.before-help
 *.before-*
+
+# Backups - never push
+*.before-help
+*.before-*
+*.bak
+*.orig
+*~
+*.pid
+storage/*.pid

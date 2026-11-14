@@ -2,6 +2,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { db } = require("../../database/db");
+const botConfigService = require("../services/bot-config.service");
 
 const BOTS_DIR = path.resolve(__dirname, "../../storage/bots");
 const LOGS_DIR = path.resolve(__dirname, "../../storage/logs");
@@ -250,6 +251,7 @@ async function startBot(botId, ownerId) {
     }
 
     const { botDir, entryFile } = resolveBotEntry(bot);
+    const runtimeConfig = botConfigService.getRuntimeConfig(botId);
 
     if (
         !Number.isSafeInteger(OLD_SPACE_MB) ||
@@ -295,9 +297,13 @@ async function startBot(botId, ownerId) {
             "--tmpfs", "/home/nexhost:rw,nosuid,nodev,size=64m,uid=10001,gid=10001",
             "--mount", `type=bind,source=${botDir},target=/app,readonly`,
             "--workdir", "/app",
+            ...Object.entries(runtimeConfig.environment).flatMap(
+                ([key, value]) => ["--env", `${key}=${value}`]
+            ),
             DOCKER_IMAGE,
             `--max-old-space-size=${OLD_SPACE_MB}`,
-            entryFile
+            entryFile,
+            ...runtimeConfig.startupArgs
         ], { timeout: 120000 });
 
         const container = inspectContainer(botId);

@@ -55,10 +55,8 @@ function getEmailConfig() {
     };
 }
 
-async function sendPasswordResetEmail(email, token) {
-    const config = getEmailConfig();
-
-    const transporter = nodemailer.createTransport({
+function createTransporter(config) {
+    return nodemailer.createTransport({
         host: config.host,
         port: config.port,
         secure: config.secure,
@@ -67,6 +65,51 @@ async function sendPasswordResetEmail(email, token) {
         greetingTimeout: 15000,
         socketTimeout: 20000
     });
+}
+
+async function sendVerificationEmail(email, code) {
+    if (typeof code !== "string" || !/^\d{8}$/.test(code)) {
+        throw new Error("Invalid email verification code.");
+    }
+
+    const config = getEmailConfig();
+    const transporter = createTransporter(config);
+
+    await transporter.sendMail({
+        from: config.from,
+        to: email,
+        subject: "Verify Your NEXHOST Account",
+        text: [
+            "Welcome to NEXHOST!",
+            "",
+            "Use this confirmation code to verify your email address:",
+            "",
+            code,
+            "",
+            "This code expires in 10 minutes.",
+            "If you did not create a NEXHOST account, you can ignore this email."
+        ].join("\n"),
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#222">
+                <h2>Welcome to NEXHOST!</h2>
+                <p>Use the confirmation code below to verify your email address.</p>
+                <div style="margin:28px 0;padding:20px;background:#f3f4f6;border-radius:8px;text-align:center">
+                    <strong style="font-size:32px;letter-spacing:8px;color:#2563eb">${code}</strong>
+                </div>
+                <p>This code expires in <strong>10 minutes</strong>.</p>
+                <p>If you did not create a NEXHOST account, you can safely ignore this email.</p>
+                <hr>
+                <p style="font-size:12px;color:#777">NEXHOST Account Security</p>
+            </div>
+        `
+    });
+
+    return true;
+}
+
+async function sendPasswordResetEmail(email, token) {
+    const config = getEmailConfig();
+    const transporter = createTransporter(config);
 
     const resetUrl = new URL("/reset-password", config.publicUrl);
     resetUrl.searchParams.set("token", token);
@@ -108,5 +151,6 @@ async function sendPasswordResetEmail(email, token) {
 }
 
 module.exports = {
+    sendVerificationEmail,
     sendPasswordResetEmail
 };
