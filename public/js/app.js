@@ -963,26 +963,208 @@ async function deleteBot(id) {
     }
 }
 
+let uploadInProgress = false;
+
+function showUploadProgress(file, percent, status, phase = "uploading", loaded = 0) {
+    let panel = document.getElementById("upload-progress-panel");
+
+    if (!panel) {
+        panel = document.createElement("div");
+        panel.id = "upload-progress-panel";
+        panel.className = "upload-progress-panel";
+        document.body.appendChild(panel);
+    }
+
+    const formatSize = bytes => `${(bytes / 1048576).toFixed(2)} MB`;
+    const processing = phase === "processing";
+    const successful = phase === "success";
+    const failed = phase === "failed";
+
+    const displayPercent = successful ? 100 : Math.min(99, Math.max(0, percent || 0));
+
+    panel.innerHTML = `
+        <div class="upload-progress-header">
+            <strong>${successful ? "Deployment complete" : failed ? "Upload failed" : "Uploading deployment"}</strong>
+            <button type="button" id="close-upload-progress"
+                aria-label="Close upload status">×</button>
+        </div>
+
+        <div class="upload-progress-filename">${escapeHTML(file.name)}</div>
+
+        <div class="upload-progress-track ${processing ? "processing" : ""} ${failed ? "failed" : ""}">
+            <div class="upload-progress-fill"
+                style="width:${processing ? 35 : displayPercent}%"></div>
+        </div>
+
+        <div class="upload-progress-info">
+            <span>${escapeHTML(status)}</span>
+            <strong>${processing ? "..." : successful ? "100%" : failed ? "Failed" : `${displayPercent}%`}</strong>
+        </div>
+
+        <div class="upload-progress-size">
+            ${formatSize(loaded)} / ${formatSize(file.size)}
+        </div>
+    `;
+
+    panel.classList.add("visible");
+
+    document.getElementById("close-upload-progress")
+        .addEventListener("click", () => {
+            if (!uploadInProgress) panel.remove();
+            else notify("Please wait until the upload finishes.");
+        });
+}
+
 async function uploadBot(id, file) {
-    if (!file) return;
+    if (!file || uploadInProgress) return;
 
     if (!file.name.toLowerCase().endsWith(".zip")) {
         notify("Please select a ZIP file.");
         return;
     }
 
+    if (file.size > 20 * 1024 * 1024) {
+        notify("ZIP file exceeds the 20 MB upload limit.");
+        return;
+    }
+
     const form = new FormData();
     form.append("file", file);
 
-    try {
-        const result = await api(`/bots/${encodeURIComponent(id)}/upload`, {
-            method: "POST",
-            body: form
-        });
+    uploadInProgress = true;
 
-        notify(`Uploaded deployment version ${result.deployment.version}.`);
-        await loadBots();
+    const xhr = new XMLHttpRequest();
+    let uploadedBytes = 0;
+
+    showUploadProgress(file, 0, "Preparing upload...", "uploading", 0);
+
+    xhr.open("POST", `${API}/bots/${encodeURIComponent(id)}/upload`);
+
+    if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    }
+
+    xhr.upload.addEventListener("progress", event => {
+        if (!event.lengthComputable) return;
+
+        uploadedBytes = event.loaded;
+
+        if (event.loaded >= event.total) {
+            showUploadProgress(
+                file, 99,
+                "Upload received. Server is processing the archive...",
+                "processing", uploadedBytes
+            );
+            return;
+        }
+
+        const percent = event.total
+            ? event.loaded / event.total * 100
+            : 0;
+
+        showUploadProgress(
+            file, percent,
+            "Transferring ZIP archive...",
+            "uploading", uploadedBytes
+        );
+    });
+
+    xhr.addEventListener("load", async () => {
+        let result;
+
+        try {
+            result = JSON.parse(xhr.responseText || "{}");
+        } catch {
+            result = {};
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300 || result.success === false) {
+            uploadInProgress = false;
+
+            const message = result.message || `Upload failed (${xhr.status}).`;
+
+            showUploadProgress(file, 0, message, "failed", uploadedBytes);
+            notify(message);
+            return;
+        }
+
+        if (!result.deployment) {
+            uploadInProgress = false;
+
+            showUploadProgress(
+                file, 0,
+                "Server response did not include deployment confirmation.",
+                "failed", uploadedBytes
+            );
+
+            notify("Deployment confirmation missing from server response.");
+            return;
+        }
+
+        showUploadProgress(
+            file, 100,
+            "Server confirmed deployment successfully!",
+            "success", file.size
+        );
+
+        notify(`Deployment version ${result.deployment.version} uploaded successfully.`);
+
+        try {
+            await loadBots();
+        } catch (error) {
+            console.error("[UPLOAD REFRESH]", error);
+        }
+
+        uploadInProgress = false;
+
+        setTimeout(() => {
+            document.getElementById("upload-progress-panel")?.remove();
+        }, 5000);
+    });
+
+    xhr.addEventListener("error", () => {
+        uploadInProgress = false;
+
+        showUploadProgress(
+            file, 0,
+            "Network error. Upload could not be completed.",
+            "failed", uploadedBytes
+        );
+
+        notify("Network error during upload. Check your connection.");
+    });
+
+    xhr.addEventListener("abort", () => {
+        uploadInProgress = false;
+
+        showUploadProgress(
+            file, 0, "Upload cancelled.", "failed", uploadedBytes
+        );
+
+        notify("Upload cancelled.");
+    });
+
+    xhr.addEventListener("timeout", () => {
+        uploadInProgress = false;
+
+        showUploadProgress(
+            file, 0, "Upload timed out.", "failed", uploadedBytes
+        );
+
+        notify("Upload timed out. Please try again.");
+    });
+
+    xhr.timeout = 180000;
+
+    try {
+        xhr.send(form);
     } catch (error) {
+        uploadInProgress = false;
+
+        showUploadProgress(
+            file, 0, error.message, "failed", uploadedBytes
+        );
+
         notify(error.message);
     }
 }
@@ -1171,6 +1353,146 @@ async function loadBotConfig() {
     `;
 }
 
+
+let fileManagerPath = "";
+
+function fileManagerUrl(endpoint, params = {}) {
+    const query = new URLSearchParams(params);
+    return `/bots/${encodeURIComponent(activeBotId)}/${endpoint}${query.size ? "?" + query : ""}`;
+}
+
+function fileManagerSize(size) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1048576) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / 1048576).toFixed(1)} MB`;
+}
+
+async function loadFileManager() {
+    const target = $("#details-content");
+
+    target.innerHTML = `
+        <div class="fm-toolbar">
+            <button class="small-btn" data-fm-action="refresh">Refresh</button>
+            <button class="small-btn" data-fm-action="up">Up</button>
+        </div>
+        <div class="fm-warning">
+            Changes affect your bot files directly. Restart the bot when code changes require it.
+        </div>
+        <div id="fm-breadcrumb" class="fm-breadcrumb"></div>
+        <div id="fm-browser"><p class="muted">Loading files...</p></div>
+    `;
+
+    await refreshFileList();
+}
+
+async function refreshFileList() {
+    const browser = $("#fm-browser");
+    if (!browser) return;
+
+    browser.innerHTML = `<p class="muted">Loading...</p>`;
+
+    try {
+        const result = await api(fileManagerUrl("files", {
+            path: fileManagerPath
+        }));
+
+        renderFileList(result.files || []);
+        renderFileBreadcrumb();
+    } catch (error) {
+        browser.textContent = error.message;
+    }
+}
+
+function renderFileBreadcrumb() {
+    const target = $("#fm-breadcrumb");
+    if (!target) return;
+
+    const parts = fileManagerPath ? fileManagerPath.split("/") : [];
+
+    target.innerHTML = `
+        <button class="fm-crumb" data-fm-action="breadcrumb" data-path="">Root</button>
+        ${parts.map((part, index) => `
+            <span>/</span>
+            <button class="fm-crumb"
+                data-fm-action="breadcrumb"
+                data-path="${escapeHTML(parts.slice(0, index + 1).join("/"))}">
+                ${escapeHTML(part)}
+            </button>
+        `).join("")}
+    `;
+}
+
+
+function renderFileList(files) {
+    const target = $("#fm-browser");
+    if (!target) return;
+
+    if (!files.length) {
+        target.innerHTML = `<p class="muted">This folder is empty.</p>`;
+        return;
+    }
+
+    target.innerHTML = `
+        <div class="fm-file-list">
+            ${files.map(file => `
+                <div class="fm-file-row">
+                    <button class="fm-file-open"
+                        data-fm-action="${file.type === "directory" ? "open-folder" : "open-file"}"
+                        data-name="${escapeHTML(file.name)}">
+                        <span>${file.type === "directory" ? "📁" : "📄"}</span>
+                        <span>${escapeHTML(file.name)}</span>
+                    </button>
+                    <span class="fm-file-size">
+                        ${file.type === "directory" ? "Folder" : fileManagerSize(file.size)}
+                    </span>
+                    <span class="fm-file-date">
+                        ${escapeHTML(new Date(file.modifiedAt).toLocaleString())}
+                    </span>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+let editingFilePath = "";
+
+async function openFileEditor(path) {
+    try {
+        const result = await api(fileManagerUrl("file", { path }));
+        editingFilePath = path;
+
+        $("#fm-browser").innerHTML = `
+            <div class="fm-editor-toolbar">
+                <strong>${escapeHTML(path)}</strong>
+                <button class="small-btn" data-fm-action="editor-back">Back</button>
+                <button class="small-btn" data-fm-action="editor-save">Save</button>
+            </div>
+            <textarea id="fm-editor" spellcheck="false">${escapeHTML(result.file.content)}</textarea>
+        `;
+    } catch (error) {
+        notify(error.message);
+    }
+}
+
+async function saveFileEditor() {
+    const editor = $("#fm-editor");
+    if (!editor || !editingFilePath) return;
+
+    try {
+        await api(fileManagerUrl("file"), {
+            method: "PUT",
+            body: JSON.stringify({
+                path: editingFilePath,
+                content: editor.value
+            })
+        });
+
+        notify("File saved successfully.");
+    } catch (error) {
+        notify(error.message);
+    }
+}
+
 async function loadDetails() {
     const target = $("#details-content");
     target.innerHTML = `<p class="muted">Loading...</p>`;
@@ -1219,7 +1541,11 @@ async function loadDetails() {
                 : `<p class="muted">No deployments found.</p>`;
         } else if (detailMode === "config") {
             await loadBotConfig();
-        }
+        } else if (detailMode === "files") {
+            await loadFileManager();
+        
+
+    }
     } catch (error) {
         target.textContent = error.message;
     }
@@ -1334,6 +1660,38 @@ document.addEventListener("click", event => {
         loadDetails();
     }
 
+
+    const fmAction = event.target.closest("[data-fm-action]");
+    if (fmAction) {
+        const action = fmAction.dataset.fmAction;
+
+        if (action === "refresh") {
+            refreshFileList();
+        } else if (action === "up") {
+            fileManagerPath = fileManagerPath.split("/").slice(0, -1).join("/");
+            refreshFileList();
+        } else if (action === "breadcrumb") {
+            fileManagerPath = fmAction.dataset.path || "";
+            refreshFileList();
+        } else if (action === "open-folder") {
+            if (!fmAction.disabled) {
+                fileManagerPath = [fileManagerPath, fmAction.dataset.name]
+                    .filter(Boolean).join("/");
+                refreshFileList();
+            }
+        }
+    }
+
+    if (fmAction?.dataset.fmAction === "open-file") {
+        const path = [fileManagerPath, fmAction.dataset.name]
+            .filter(Boolean).join("/");
+        openFileEditor(path);
+    } else if (fmAction?.dataset.fmAction === "editor-save") {
+        saveFileEditor();
+    } else if (fmAction?.dataset.fmAction === "editor-back") {
+        refreshFileList();
+    }
+
     const logAction = event.target.closest("[data-log-action]");
     if (logAction) {
         const action = logAction.dataset.logAction;
@@ -1378,7 +1736,11 @@ document.addEventListener("click", event => {
         } else if (action.dataset.action === "deployments") {
             openDetails(id, "deployments");
         } else if (action.dataset.action === "upload") {
-            document.querySelector(`[data-upload-id="${CSS.escape(id)}"]`).click();
+            const card = action.closest(".bot-card");
+            const input = card?.querySelector("[data-upload-id]");
+
+            if (input) input.click();
+            else notify("Unable to open the ZIP file selector.");
         } else if (action.dataset.action === "support-open") {
             openSupportTicket(id);
         } else if (action.dataset.action === "support-back") {

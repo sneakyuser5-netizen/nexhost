@@ -35,3 +35,7 @@ storage/nexhost-server.pid
 *~
 *.pid
 storage/*.pid
+
+# Runtime - never push
+storage/*.pid
+storage/snapshots/
